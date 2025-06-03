@@ -2,9 +2,7 @@
 #include <string>
 #include <iostream>
 
-const UINT16 SERVER_PORT = 11021;
-const UINT16 MAX_CLIENT = 3;		//총 접속할수 있는 클라이언트 수
-const UINT32 MAX_IO_WORKER_THREAD = 4;  //쓰레드 풀에 넣을 쓰레드 수
+#pragma comment(lib, "C:\\Program Files\\MySQL\\MySQL Server 8.0\\lib\\libmysql.lib")
 
 int main()
 {
@@ -18,7 +16,7 @@ int main()
 
 	server.Run(MAX_CLIENT);
 
-	printf("아무 키나 누를 때까지 대기합니다\n");
+
 	while (true)
 	{
 		std::string inputCmd;
@@ -31,6 +29,8 @@ int main()
 	}
 
 	server.End();
+	
+
 	return 0;
 }
 

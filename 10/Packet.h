@@ -43,8 +43,12 @@ struct PacketInfo
 };
 
 
-enum class  PACKET_ID : UINT16
+enum class  PACKET_ID : UINT16   // 전송 크기를 줄일 수 있고, 구조체 정렬도 최적화할 수 있음.
 {
+	// 시스템관련 1 ~ 99 
+	// DB 관련 100 ~ 199
+	// 클라 로직 관련 200 ~ 
+
 	//SYSTEM
 	SYS_USER_CONNECT = 11,
 	SYS_USER_DISCONNECT = 12,
@@ -54,7 +58,7 @@ enum class  PACKET_ID : UINT16
 	DB_END = 199,
 
 	//Client
-	LOGIN_REQUEST = 201,
+	LOGIN_REQUEST = 201,		
 	LOGIN_RESPONSE = 202,
 
 	ROOM_ENTER_REQUEST = 206,

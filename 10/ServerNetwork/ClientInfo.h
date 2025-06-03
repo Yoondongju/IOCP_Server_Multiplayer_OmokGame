@@ -78,7 +78,7 @@ public:
 
 	bool PostAccept(SOCKET listenSock_, const UINT64 curTimeSec_)
 	{
-		printf_s("PostAccept. client Index: %d\n", GetIndex());
+		printf_s("PostAccept client Index: %d\n", GetIndex());
 
 		mLatestClosedTimeSec = UINT32_MAX;
 

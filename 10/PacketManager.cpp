@@ -8,6 +8,8 @@
 #include "RedisManager.h"
 
 
+
+
 void PacketManager::Init(const UINT32 maxClient_)
 {
 	mRecvFuntionDictionary = std::unordered_map<int, PROCESS_RECV_PACKET_FUNCTION>();
@@ -43,7 +45,7 @@ void PacketManager::CreateCompent(const UINT32 maxClient_)
 
 bool PacketManager::Run()
 {	
-	if (mRedisMgr->Run("127.0.0.1", 6379, 1) == false)
+	if (mRedisMgr->Run("127.0.0.1", 6379, 1) == false)	// Redis초기화및 Redis처리 스레드 생성
 	{
 		return false;
 	}
@@ -51,6 +53,8 @@ bool PacketManager::Run()
 	//이 부분을 패킷 처리 부분으로 이동 시킨다.
 	mIsRunProcessThread = true;
 	mProcessThread = std::thread([this]() { ProcessPacket(); });
+
+	printf("패킷처리 스레드 시작..\n");
 
 	return true;
 }
@@ -113,7 +117,7 @@ PacketInfo PacketManager::DequePacketData()
 	}
 
 	auto pUser = mUserManager->GetUserByConnIdx(userIndex);
-	auto packetData = pUser->GetPacket();
+	auto packetData = pUser->GetPacket();	// 유저가 들고잇는 패킷을 가져온다
 	packetData.ClientIndex = userIndex;
 	return packetData;
 }
@@ -199,13 +203,14 @@ void PacketManager::ProcessLogin(UINT32 clientIndex_, UINT16 packetSize_, char* 
 { 
 	if (LOGIN_REQUEST_PACKET_SZIE != packetSize_)
 	{
+		printf("잘못된 크기의 패킷사이즈입니다.\n");
 		return;
 	}
 
 	auto pLoginReqPacket = reinterpret_cast<LOGIN_REQUEST_PACKET*>(pPacket_);
 
 	auto pUserID = pLoginReqPacket->UserID;
-	printf("requested user id = %s\n", pUserID);
+	printf("로그인 요청한 유저아이디 >> %s\n", pUserID);
 
 	LOGIN_RESPONSE_PACKET loginResPacket;
 	loginResPacket.PacketId = (UINT16)PACKET_ID::LOGIN_RESPONSE;
@@ -220,21 +225,97 @@ void PacketManager::ProcessLogin(UINT32 clientIndex_, UINT16 packetSize_, char* 
 	}
 
 	//여기에서 이미 접속된 유저인지 확인하고, 접속된 유저라면 실패한다.
-	if (mUserManager->FindUserIndexByID(pUserID) == -1) 
+	if (mUserManager->FindUserIndexByID(pUserID) == -1)		// 신입
 	{ 
-		RedisLoginReq dbReq;
-		CopyMemory(dbReq.UserID, pLoginReqPacket->UserID, (MAX_USER_ID_LEN + 1));
-		CopyMemory(dbReq.UserPW, pLoginReqPacket->UserPW, (MAX_USER_PW_LEN + 1));
+		//RedisLoginReq dbReq;
+		//CopyMemory(dbReq.UserID, pLoginReqPacket->UserID, (MAX_USER_ID_LEN + 1));
+		//CopyMemory(dbReq.UserPW, pLoginReqPacket->UserPW, (MAX_USER_PW_LEN + 1));
+		//
+		//RedisTask task;
+		//task.UserIndex = clientIndex_;
+		//task.TaskID = RedisTaskID::REQUEST_LOGIN;
+		//task.DataSize = sizeof(RedisLoginReq);
+		//task.pData = new char[task.DataSize];
+		//CopyMemory(task.pData, (char*)&dbReq, task.DataSize);
+		//mRedisMgr->PushTask(task);
 
-		RedisTask task;
-		task.UserIndex = clientIndex_;
-		task.TaskID = RedisTaskID::REQUEST_LOGIN;
-		task.DataSize = sizeof(RedisLoginReq);
-		task.pData = new char[task.DataSize];
-		CopyMemory(task.pData, (char*)&dbReq, task.DataSize);
-		mRedisMgr->PushTask(task);
+		
+		printf("MySql에서 아이디 찾는중.. >> %s\n", pUserID);
 
-		printf("Login To Redis user id = %s\n", pUserID);
+		m_mysqlConn = mysql_init(nullptr);
+		if (m_mysqlConn == nullptr) {
+			std::cout << "MySQL 초기화 실패\n";
+			return;
+		}
+		if (mysql_real_connect(m_mysqlConn, "localhost", "root", "0928", "game_db", 3306, nullptr, 0)) {
+			std::cout << "MySQL 연결 성공!\n";
+		}
+		else 
+		{
+			std::cout << "MySQL 연결 실패: " << mysql_error(m_mysqlConn) << "\n";
+			mysql_close(m_mysqlConn);
+			return;
+		}
+
+
+		// MySQL 쿼리 준비
+		char query[512];
+		snprintf(query, sizeof(query),
+			"SELECT password_hash FROM users WHERE user_id='%s' LIMIT 1;",
+			pUserID);
+
+
+		if (mysql_query(m_mysqlConn, query) != 0)  // 쿼리 실패시
+		{
+			printf("MySQL 쿼리 실패: %s\n", mysql_error(m_mysqlConn));
+			loginResPacket.Result = (UINT16)ERROR_CODE::LOGIN_DB_ERROR;
+			SendPacketFunc(clientIndex_, sizeof(LOGIN_RESPONSE_PACKET), (char*)&loginResPacket);
+
+			mysql_close(m_mysqlConn);
+			return;
+		}
+
+		MYSQL_RES* result = mysql_store_result(m_mysqlConn);
+		if (!result)
+		{
+			printf("MySQL 결과 없음 또는 오류: %s\n", mysql_error(m_mysqlConn));
+			loginResPacket.Result = (UINT16)ERROR_CODE::LOGIN_DB_ERROR;
+			SendPacketFunc(clientIndex_, sizeof(LOGIN_RESPONSE_PACKET), (char*)&loginResPacket);
+
+			mysql_close(m_mysqlConn);
+			return;
+		}
+
+		MYSQL_ROW row = mysql_fetch_row(result);
+		if (row == nullptr)
+		{
+			// 아이디 없음
+			loginResPacket.Result = (UINT16)ERROR_CODE::LOGIN_USER_NOT_FOUND;
+			SendPacketFunc(clientIndex_, sizeof(LOGIN_RESPONSE_PACKET), (char*)&loginResPacket);
+
+			mysql_free_result(result);
+			mysql_close(m_mysqlConn);
+			return;
+		}
+
+		const char* storedHash = row[0];
+		mysql_free_result(result);
+		mysql_close(m_mysqlConn);
+
+		// 여기서 비밀번호 검증
+		// 실제 서비스라면 bcrypt 같은 해시 검증 해야 하지만, 지금은 단순 비교 예시
+		if (strcmp(storedHash, pLoginReqPacket->UserPW) == 0)
+		{
+			// 로그인 성공
+			loginResPacket.Result = (UINT16)ERROR_CODE::NONE;
+
+		}
+		else
+		{
+			// 비밀번호 불일치
+			loginResPacket.Result = (UINT16)ERROR_CODE::LOGIN_USER_INVALID_PW;
+		}
+
 	}
 	else 
 	{

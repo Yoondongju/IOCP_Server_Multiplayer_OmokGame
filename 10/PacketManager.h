@@ -7,11 +7,13 @@
 #include <functional>
 #include <thread>
 #include <mutex>
+#include "mysql.h"
 
 
 class UserManager;
 class RoomManager;
 class RedisManager;
+
 
 class PacketManager {
 public:
@@ -56,6 +58,7 @@ private:
 	void ProcessLeaveRoom(UINT32 clientIndex_, UINT16 packetSize_, char* pPacket_);
 	void ProcessRoomChatMessage(UINT32 clientIndex_, UINT16 packetSize_, char* pPacket_);
 
+
 	
 
 
@@ -66,7 +69,7 @@ private:
 	RoomManager* mRoomManager;	
 	RedisManager* mRedisMgr;
 		
-	std::function<void(int, char*)> mSendMQDataFunc;
+	std::function<void(int, char*)> mSendMQDataFunc;	// ¾È¾´´Ù?
 
 
 	bool mIsRunProcessThread = false;
@@ -78,5 +81,8 @@ private:
 	std::deque<UINT32> mInComingPacketUserIndex;
 
 	std::deque<PacketInfo> mSystemPacketQueue;
+
+	MYSQL* m_mysqlConn;
+
 };
 

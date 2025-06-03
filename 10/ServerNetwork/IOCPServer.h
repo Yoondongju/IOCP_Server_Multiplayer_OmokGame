@@ -8,6 +8,7 @@
 #include <thread>
 #include <vector>
 
+
 class IOCPServer
 {
 public:
@@ -98,18 +99,18 @@ public:
 	{
 		CreateClient(maxClientCount_);
 		
-		//접속된 클라이언트 주소 정보를 저장할 구조체
-		bool bRet = CreateWokerThread();
+		
+		bool bRet = CreateWokerThread();		//  워커 스레드
 		if (false == bRet) {
 			return false;
 		}
 
-		bRet = CreateAccepterThread();
+		bRet = CreateAccepterThread();			// 승인 스레드
 		if (false == bRet) {
 			return false;
 		}
 		
-		printf("서버 시작\n");
+		printf("################### 서버를 정상적으로 시작합니다 ###################\n\n");
 		return true;
 	}
 
@@ -171,7 +172,7 @@ private:
 			mIOWorkerThreads.emplace_back([this](){ WokerThread(); });			
 		}
 
-		printf("WokerThread 시작..\n");
+		printf("Woker스레드 시작..\n");
 		return true;
 	}
 	
@@ -199,7 +200,7 @@ private:
 	{
 		mAccepterThread = std::thread([this]() { AccepterThread(); });
 		
-		printf("AccepterThread 시작..\n");
+		printf("Accepter 스레드 시작..\n");
 		return true;
 	}
 		  		

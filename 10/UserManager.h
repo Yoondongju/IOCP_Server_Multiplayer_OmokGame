@@ -52,10 +52,10 @@ public:
 	{
 		if (auto res = mUserIDDictionary.find(userID_); res != mUserIDDictionary.end())
 		{
-			return (*res).second;
+			return (*res).second;		// 유저를 발견햇단 소리고
 		}
 			
-		return -1;
+		return -1;						// 신입이엿어
 	}
 		
 	void DeleteUserInfo(User* user_)

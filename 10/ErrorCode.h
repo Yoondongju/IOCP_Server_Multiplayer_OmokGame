@@ -5,6 +5,7 @@ enum class ERROR_CODE : unsigned short
 {
 	NONE = 0,
 
+
 	USER_MGR_INVALID_USER_INDEX = 11,
 	USER_MGR_INVALID_USER_UNIQUEID = 12,
 
@@ -27,4 +28,9 @@ enum class ERROR_CODE : unsigned short
 	LEAVE_ROOM_INVALID_ROOM_INDEX = 71,
 
 	CHAT_ROOM_INVALID_ROOM_NUMBER = 81,
+
+
+	LOGIN_DB_ERROR = 99,
+	LOGIN_USER_NOT_FOUND = 100
+
 };

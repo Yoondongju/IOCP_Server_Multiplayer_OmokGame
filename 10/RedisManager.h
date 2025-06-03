@@ -23,14 +23,17 @@ public:
 			return false;
 		}
 
+
 		mIsTaskRun = true;
+		printf("Redis 동작 중...\n");
 
 		for (UINT32 i = 0; i < threadCount_; i++)
 		{
 			mTaskThreads.emplace_back([this]() { TaskProcessThread(); });
-		}
 
-		printf("Redis 동작 중...\n");
+			printf("%d 번째 Redis 스레드 시작...\n", i);
+		}
+		
 		return true;
 	}
 
@@ -74,21 +77,19 @@ private:
 	{
 		if (mConn.connect(ip_, port_) == false)
 		{
-			std::cout << "connect error " << mConn.getErrorStr() << std::endl;
+			std::cout << "Redis connect error 원인:" << mConn.getErrorStr() << std::endl;
 			return false;
 		}
 		else
 		{
-			std::cout << "connect success !!!" << std::endl;
+			std::cout << "Redis connect success !!!" << std::endl;
 		}
 
 		return true;
 	}
 
 	void TaskProcessThread()
-	{
-		printf("Redis 스레드 시작...\n");
-
+	{		
 		while (mIsTaskRun)
 		{
 			bool isIdle = true;
@@ -105,14 +106,25 @@ private:
 					bodyData.Result = (UINT16)ERROR_CODE::LOGIN_USER_INVALID_PW;
 
 					std::string value;
+
+					// Redis에서 UserID 키로 패스워드 값 가져오기 시도
 					if (mConn.get(pRequest->UserID, value))
 					{
+						// Redis에서 값이 있으면 로그인 성공 가능성 존재
 						bodyData.Result = (UINT16)ERROR_CODE::NONE;
 
+						// 패스워드 비교
 						if (value.compare(pRequest->UserPW) == 0)
 						{
-							bodyData.Result = (UINT16)ERROR_CODE::NONE;
+							bodyData.Result = (UINT16)ERROR_CODE::NONE; // 로그인 성공
+							printf("로그인 성공!\n");
 						}
+						else
+						{
+							// 비밀번호 불일치
+							printf("비밀번호가 틀렸습니다..\n");
+						}
+
 					}
 					
 					RedisTask resTask;
