@@ -30,9 +30,8 @@ public:
 		auto pRoom = GetRoomByNumber(roomNumber_);
 		if (pRoom == nullptr)
 		{
-			return (UINT16)ERROR_CODE::ROOM_INVALID_INDEX;
+			return (UINT16)ERROR_CODE::ROOM_INVALID_INDEX;	// ¹æ ¾øÀ½
 		}
-
 
 		return pRoom->EnterUser(user_);
 	}

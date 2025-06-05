@@ -7,12 +7,13 @@
 #include <functional>
 #include <thread>
 #include <mutex>
-#include "mysql.h"
+
 
 
 class UserManager;
 class RoomManager;
 class RedisManager;
+class MyDBManager;
 
 
 class PacketManager {
@@ -51,6 +52,9 @@ private:
 	void ProcessUserConnect(UINT32 clientIndex_, UINT16 packetSize_, char* pPacket_);
 	void ProcessUserDisConnect(UINT32 clientIndex_, UINT16 packetSize_, char* pPacket_);
 	
+	
+	void ProcessRegister(UINT32 clientIndex_, UINT16 packetSize_, char* pPacket_);
+
 	void ProcessLogin(UINT32 clientIndex_, UINT16 packetSize_, char* pPacket_);
 	void ProcessLoginDBResult(UINT32 clientIndex_, UINT16 packetSize_, char* pPacket_);
 	
@@ -58,7 +62,7 @@ private:
 	void ProcessLeaveRoom(UINT32 clientIndex_, UINT16 packetSize_, char* pPacket_);
 	void ProcessRoomChatMessage(UINT32 clientIndex_, UINT16 packetSize_, char* pPacket_);
 
-
+	void ProcessUserData(UINT32 clientIndex_, UINT16 packetSize_, char* pPacket_);
 	
 
 
@@ -68,6 +72,7 @@ private:
 	UserManager* mUserManager;
 	RoomManager* mRoomManager;	
 	RedisManager* mRedisMgr;
+	MyDBManager* mDBMgr;
 		
 	std::function<void(int, char*)> mSendMQDataFunc;	// ¾È¾´´Ù?
 
@@ -82,7 +87,17 @@ private:
 
 	std::deque<PacketInfo> mSystemPacketQueue;
 
-	MYSQL* m_mysqlConn;
-
 };
 
+
+//RedisLoginReq dbReq;
+//CopyMemory(dbReq.UserID, pLoginReqPacket->UserID, (MAX_USER_ID_LEN + 1));
+//CopyMemory(dbReq.UserPW, pLoginReqPacket->UserPW, (MAX_USER_PW_LEN + 1));
+//
+//RedisTask task;
+//task.UserIndex = clientIndex_;
+//task.TaskID = RedisTaskID::REQUEST_LOGIN;
+//task.DataSize = sizeof(RedisLoginReq);
+//task.pData = new char[task.DataSize];
+//CopyMemory(task.pData, (char*)&dbReq, task.DataSize);
+//mRedisMgr->PushTask(task);

@@ -25,25 +25,15 @@ public:
 	INT32 GetCurrentUserCnt() { return mCurrentUserCnt; }
 
 	INT32 GetMaxUserCnt() { return mMaxUserCnt; }
-		
-	void IncreaseUserCnt() { mCurrentUserCnt++; }
-		
-	void DecreaseUserCnt() 
-	{
-		if (mCurrentUserCnt > 0) 
-		{
-			mCurrentUserCnt--;
-		}
-	}
-
+	
 	ERROR_CODE AddUser(char* userID_, int clientIndex_)
 	{
-		//TODO 최흥배 유저 중복 조사하기
-
 		auto user_idx = clientIndex_;
 
 		mUserObjPool[user_idx]->SetLogin(userID_);
 		mUserIDDictionary.insert(std::pair< char*, int>(userID_, clientIndex_));
+
+		IncreaseUserCnt();
 
 		return ERROR_CODE::NONE;
 	}
@@ -62,6 +52,8 @@ public:
 	{
 		mUserIDDictionary.erase(user_->GetUserId());
 		user_->Clear();
+
+		DecreaseUserCnt();
 	}
 
 	User* GetUserByConnIdx(INT32 clientIndex_)
@@ -69,6 +61,37 @@ public:
 		return mUserObjPool[clientIndex_];
 	}
 
+
+	bool IsUserByLogin(INT32 clientIndex_)
+	{
+		if (User::DOMAIN_STATE::LOGIN == mUserObjPool[clientIndex_]->GetDomainState())
+		{
+			return true;
+		}
+
+		return false;
+	}
+
+	bool IsUserByRoom(INT32 clientIndex_)
+	{
+		if (User::DOMAIN_STATE::ROOM == mUserObjPool[clientIndex_]->GetDomainState())
+		{
+			return true;
+		}
+
+		return false;
+	}
+
+
+private:
+	void IncreaseUserCnt() { mCurrentUserCnt++; }
+	void DecreaseUserCnt()
+	{
+		if (mCurrentUserCnt > 0)
+		{
+			mCurrentUserCnt--;
+		}
+	}
 
 private:
 	INT32 mMaxUserCnt = 0;

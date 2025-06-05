@@ -2,11 +2,12 @@
 #include <cstring>
 
 
+#include "MyDBManager.h"
+
 #include "UserManager.h"
 #include "RoomManager.h"
 #include "PacketManager.h"
 #include "RedisManager.h"
-
 
 
 
@@ -17,6 +18,9 @@ void PacketManager::Init(const UINT32 maxClient_)
 	mRecvFuntionDictionary[(int)PACKET_ID::SYS_USER_CONNECT] = &PacketManager::ProcessUserConnect;
 	mRecvFuntionDictionary[(int)PACKET_ID::SYS_USER_DISCONNECT] = &PacketManager::ProcessUserDisConnect;
 
+
+	mRecvFuntionDictionary[(int)PACKET_ID::REGISTER_REQUEST] = &PacketManager::ProcessRegister;
+
 	mRecvFuntionDictionary[(int)PACKET_ID::LOGIN_REQUEST] = &PacketManager::ProcessLogin;
 	mRecvFuntionDictionary[(int)RedisTaskID::RESPONSE_LOGIN] = &PacketManager::ProcessLoginDBResult;
 	
@@ -24,9 +28,14 @@ void PacketManager::Init(const UINT32 maxClient_)
 	mRecvFuntionDictionary[(int)PACKET_ID::ROOM_LEAVE_REQUEST] = &PacketManager::ProcessLeaveRoom;
 	mRecvFuntionDictionary[(int)PACKET_ID::ROOM_CHAT_REQUEST] = &PacketManager::ProcessRoomChatMessage;
 				
+	mRecvFuntionDictionary[(int)PACKET_ID::USER_DATA_REQUEST] = &PacketManager::ProcessUserData;
+
 	CreateCompent(maxClient_);
 
 	mRedisMgr = new RedisManager;// std::make_unique<RedisManager>();
+	mDBMgr = new MyDBManager;
+	if (!mDBMgr->IsConnected())
+		mDBMgr->Connect();
 }
 
 void PacketManager::CreateCompent(const UINT32 maxClient_)
@@ -35,9 +44,9 @@ void PacketManager::CreateCompent(const UINT32 maxClient_)
 	mUserManager->Init(maxClient_);
 
 		
-	UINT32 startRoomNummber = 0;
-	UINT32 maxRoomCount = 10;
-	UINT32 maxRoomUserCount = 4;
+	UINT32 startRoomNummber = 0;	// 방 번호
+	UINT32 maxRoomCount = 10;		// 방 최대 갯수
+	UINT32 maxRoomUserCount = 4;	// 방 최대 접속 인원
 	mRoomManager = new RoomManager;
 	mRoomManager->SendPacketFunc = SendPacketFunc;
 	mRoomManager->Init(startRoomNummber, maxRoomCount, maxRoomUserCount);
@@ -62,6 +71,7 @@ bool PacketManager::Run()
 void PacketManager::End()
 {
 	mRedisMgr->End();
+	mDBMgr->Disconnect();
 
 	mIsRunProcessThread = false;
 
@@ -199,6 +209,48 @@ void PacketManager::ProcessUserDisConnect(UINT32 clientIndex_, UINT16 packetSize
 	ClearConnectionInfo(clientIndex_);
 }
 
+void PacketManager::ProcessRegister(UINT32 clientIndex_, UINT16 packetSize_, char* pPacket_)
+{
+	REGISTER_REQUEST_PACKET* pRegisterPacket = (REGISTER_REQUEST_PACKET*)pPacket_;
+
+	char query[512];
+	snprintf(query, sizeof(query),
+		"INSERT INTO users (user_id, password_hash) VALUES ('%s', '%s')",		// DB에 저장
+		pRegisterPacket->UserID, pRegisterPacket->UserPW);
+
+
+	MYSQL* const sqlconn = mDBMgr->Get_SqlConn();
+
+	int queryResult = mysql_query(sqlconn, query);
+
+	REGISTER_RESPONSE_PACKET resPacket{};
+	resPacket.PacketId = (UINT16)PACKET_ID::REGISTER_RESPONSE;
+
+	if (queryResult != 0)
+	{
+		// 에러 로그
+		std::cout << "MySQL 쿼리 실패: " << mysql_error(sqlconn) << "\n";
+
+		// 중복 ID일 경우 (Error code 1062) 구분 가능
+		if (mysql_errno(sqlconn) == 1062)
+		{
+			resPacket.Result = 2; // ID 중복 에러 코드 예시
+		}
+		else
+		{
+			resPacket.Result = 1; // 일반 실패
+		}
+	}
+	else
+	{
+		resPacket.Result = 0; // 성공
+	}
+
+	resPacket.PacketLength = sizeof(resPacket);
+
+	SendPacketFunc(clientIndex_, sizeof(resPacket), (char*)&resPacket);
+}
+
 void PacketManager::ProcessLogin(UINT32 clientIndex_, UINT16 packetSize_, char* pPacket_)
 { 
 	if (LOGIN_REQUEST_PACKET_SZIE != packetSize_)
@@ -227,62 +279,28 @@ void PacketManager::ProcessLogin(UINT32 clientIndex_, UINT16 packetSize_, char* 
 	//여기에서 이미 접속된 유저인지 확인하고, 접속된 유저라면 실패한다.
 	if (mUserManager->FindUserIndexByID(pUserID) == -1)		// 신입
 	{ 
-		//RedisLoginReq dbReq;
-		//CopyMemory(dbReq.UserID, pLoginReqPacket->UserID, (MAX_USER_ID_LEN + 1));
-		//CopyMemory(dbReq.UserPW, pLoginReqPacket->UserPW, (MAX_USER_PW_LEN + 1));
-		//
-		//RedisTask task;
-		//task.UserIndex = clientIndex_;
-		//task.TaskID = RedisTaskID::REQUEST_LOGIN;
-		//task.DataSize = sizeof(RedisLoginReq);
-		//task.pData = new char[task.DataSize];
-		//CopyMemory(task.pData, (char*)&dbReq, task.DataSize);
-		//mRedisMgr->PushTask(task);
-
-		
+		MYSQL* const sqlconn = mDBMgr->Get_SqlConn();
 		printf("MySql에서 아이디 찾는중.. >> %s\n", pUserID);
 
-		m_mysqlConn = mysql_init(nullptr);
-		if (m_mysqlConn == nullptr) {
-			std::cout << "MySQL 초기화 실패\n";
-			return;
-		}
-		if (mysql_real_connect(m_mysqlConn, "localhost", "root", "0928", "game_db", 3306, nullptr, 0)) {
-			std::cout << "MySQL 연결 성공!\n";
-		}
-		else 
-		{
-			std::cout << "MySQL 연결 실패: " << mysql_error(m_mysqlConn) << "\n";
-			mysql_close(m_mysqlConn);
-			return;
-		}
-
-
-		// MySQL 쿼리 준비
 		char query[512];
 		snprintf(query, sizeof(query),
 			"SELECT password_hash FROM users WHERE user_id='%s' LIMIT 1;",
 			pUserID);
 
-
-		if (mysql_query(m_mysqlConn, query) != 0)  // 쿼리 실패시
+		if (mysql_query(sqlconn, query) != 0)  // 쿼리 실패시
 		{
-			printf("MySQL 쿼리 실패: %s\n", mysql_error(m_mysqlConn));
+			printf("MySQL 쿼리 실패: %s\n", mysql_error(sqlconn));
 			loginResPacket.Result = (UINT16)ERROR_CODE::LOGIN_DB_ERROR;
 			SendPacketFunc(clientIndex_, sizeof(LOGIN_RESPONSE_PACKET), (char*)&loginResPacket);
-
-			mysql_close(m_mysqlConn);
 			return;
 		}
 
-		MYSQL_RES* result = mysql_store_result(m_mysqlConn);
+		MYSQL_RES* result = mysql_store_result(sqlconn);
 		if (!result)
 		{
-			printf("MySQL 결과 없음 또는 오류: %s\n", mysql_error(m_mysqlConn));
+			printf("MySQL 결과 없음 또는 오류: %s\n", mysql_error(sqlconn));
 			loginResPacket.Result = (UINT16)ERROR_CODE::LOGIN_DB_ERROR;
 			SendPacketFunc(clientIndex_, sizeof(LOGIN_RESPONSE_PACKET), (char*)&loginResPacket);
-
-			mysql_close(m_mysqlConn);
 			return;
 		}
 
@@ -294,13 +312,11 @@ void PacketManager::ProcessLogin(UINT32 clientIndex_, UINT16 packetSize_, char* 
 			SendPacketFunc(clientIndex_, sizeof(LOGIN_RESPONSE_PACKET), (char*)&loginResPacket);
 
 			mysql_free_result(result);
-			mysql_close(m_mysqlConn);
 			return;
 		}
 
 		const char* storedHash = row[0];
 		mysql_free_result(result);
-		mysql_close(m_mysqlConn);
 
 		// 여기서 비밀번호 검증
 		// 실제 서비스라면 bcrypt 같은 해시 검증 해야 하지만, 지금은 단순 비교 예시
@@ -308,7 +324,8 @@ void PacketManager::ProcessLogin(UINT32 clientIndex_, UINT16 packetSize_, char* 
 		{
 			// 로그인 성공
 			loginResPacket.Result = (UINT16)ERROR_CODE::NONE;
-
+	
+			mUserManager->AddUser(pLoginReqPacket->UserID, mUserManager->GetCurrentUserCnt());
 		}
 		else
 		{
@@ -316,6 +333,7 @@ void PacketManager::ProcessLogin(UINT32 clientIndex_, UINT16 packetSize_, char* 
 			loginResPacket.Result = (UINT16)ERROR_CODE::LOGIN_USER_INVALID_PW;
 		}
 
+		SendPacketFunc(clientIndex_, sizeof(LOGIN_RESPONSE_PACKET), (char*)&loginResPacket);
 	}
 	else 
 	{
@@ -350,21 +368,16 @@ void PacketManager::ProcessEnterRoom(UINT32 clientIndex_, UINT16 packetSize_, ch
 	UNREFERENCED_PARAMETER(packetSize_);
 
 	auto pRoomEnterReqPacket = reinterpret_cast<ROOM_ENTER_REQUEST_PACKET*>(pPacket_);
-	auto pReqUser = mUserManager->GetUserByConnIdx(clientIndex_);
-
-	if (!pReqUser || pReqUser == nullptr) 
-	{
-		return;
-	}
 				
+
+	auto pUser= mUserManager->GetUserByConnIdx(clientIndex_);
 	ROOM_ENTER_RESPONSE_PACKET roomEnterResPacket;
 	roomEnterResPacket.PacketId = (UINT16)PACKET_ID::ROOM_ENTER_RESPONSE;
 	roomEnterResPacket.PacketLength = sizeof(ROOM_ENTER_RESPONSE_PACKET);
 				
-	roomEnterResPacket.Result = mRoomManager->EnterUser(pRoomEnterReqPacket->RoomNumber, pReqUser);
+	roomEnterResPacket.Result = mRoomManager->EnterUser(pRoomEnterReqPacket->RoomNumber, pUser);
 
 	SendPacketFunc(clientIndex_, sizeof(ROOM_ENTER_RESPONSE_PACKET), (char*)&roomEnterResPacket);
-	printf("Response Packet Sended");
 }
 
 
@@ -411,5 +424,33 @@ void PacketManager::ProcessRoomChatMessage(UINT32 clientIndex_, UINT16 packetSiz
 	SendPacketFunc(clientIndex_, sizeof(ROOM_CHAT_RESPONSE_PACKET), (char*)&roomChatResPacket);
 
 	pRoom->NotifyChat(clientIndex_, reqUser->GetUserId().c_str(), pRoomChatReqPacketet->Message);		
-}		   
+}
+
+void PacketManager::ProcessUserData(UINT32 clientIndex_, UINT16 packetSize_, char* pPacket_)
+{
+	UNREFERENCED_PARAMETER(packetSize_);
+	UNREFERENCED_PARAMETER(pPacket_);
+
+	auto pRoomChatReqPacketet = reinterpret_cast<USER_DATA_PACKET*>(pPacket_);
+
+
+	USER_DATA_PACKET UserDataPacket;
+	UserDataPacket.PacketId = (UINT16)PACKET_ID::USER_DATA_RESPONSE;
+	UserDataPacket.PacketLength = sizeof(USER_DATA_PACKET);
+
+	auto pReqUser = mUserManager->GetUserByConnIdx(clientIndex_);
+	if (pReqUser == nullptr)
+	{
+		return;
+	}
+
+
+	strncpy(UserDataPacket.userId, pReqUser->GetUserId().c_str(), sizeof(UserDataPacket.userId));
+	UserDataPacket.userId[sizeof(UserDataPacket.userId) - 1] = '\0'; // 널 종료 보장
+	UserDataPacket.userIndex = pReqUser->GetNetConnIdx();
+	UserDataPacket.domainState = (UINT32)pReqUser->GetDomainState();
+	UserDataPacket.roomIndex = pReqUser->GetCurrentRoom();	// -1가면 방없음임
+
+	SendPacketFunc(clientIndex_, sizeof(USER_DATA_PACKET), (char*)&UserDataPacket);
+}
 

@@ -29,8 +29,15 @@ public:
 	{
 		if (mCurrentUserCount >= mMaxUserCount)
 		{
-			return (UINT16)ERROR_CODE::ENTER_ROOM_FULL_USER;
+			return (UINT16)ERROR_CODE::ENTER_ROOM_FULL_USER;	// ¹æ ²ËÂþ¾î
 		}
+
+		User::DOMAIN_STATE State = user_->GetDomainState();
+		if (User::DOMAIN_STATE::LOGIN != State)
+		{
+			return (UINT16)ERROR_CODE::LOGIN_USER_NOT_FOUND;
+		}
+	
 
 		mUserList.push_back(user_);
 		++mCurrentUserCount;

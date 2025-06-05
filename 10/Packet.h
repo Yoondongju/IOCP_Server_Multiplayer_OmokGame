@@ -3,6 +3,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
+
 struct RawPacketData
 {
 	UINT32 ClientIndex = 0;
@@ -58,8 +59,11 @@ enum class  PACKET_ID : UINT16   // 전송 크기를 줄일 수 있고, 구조체 정렬도 최적
 	DB_END = 199,
 
 	//Client
-	LOGIN_REQUEST = 201,		
-	LOGIN_RESPONSE = 202,
+	REGISTER_REQUEST = 200,		// 회원가입
+	REGISTER_RESPONSE = 201,
+
+	LOGIN_REQUEST = 202,		
+	LOGIN_RESPONSE = 203,
 
 	ROOM_ENTER_REQUEST = 206,
 	ROOM_ENTER_RESPONSE = 207,
@@ -70,6 +74,9 @@ enum class  PACKET_ID : UINT16   // 전송 크기를 줄일 수 있고, 구조체 정렬도 최적
 	ROOM_CHAT_REQUEST = 221,
 	ROOM_CHAT_RESPONSE = 222,
 	ROOM_CHAT_NOTIFY = 223,
+
+	USER_DATA_REQUEST = 224,
+	USER_DATA_RESPONSE = 225,
 };
 
 
@@ -86,6 +93,17 @@ const UINT32 PACKET_HEADER_LENGTH = sizeof(PACKET_HEADER);
 //- 로그인 요청
 const int MAX_USER_ID_LEN = 32;
 const int MAX_USER_PW_LEN = 32;
+
+struct REGISTER_REQUEST_PACKET : public PACKET_HEADER
+{
+	char UserID[MAX_USER_ID_LEN + 1];
+	char UserPW[MAX_USER_PW_LEN + 1];
+};
+
+struct REGISTER_RESPONSE_PACKET : public PACKET_HEADER
+{
+	UINT16 Result; // 0: 성공, 1: 실패 등
+};
 
 struct LOGIN_REQUEST_PACKET : public PACKET_HEADER
 {
@@ -126,8 +144,6 @@ struct ROOM_LEAVE_RESPONSE_PACKET : public PACKET_HEADER
 	INT16 Result;
 };
 
-
-
 // 룸 채팅
 const int MAX_CHAT_MSG_SIZE = 256;
 struct ROOM_CHAT_REQUEST_PACKET : public PACKET_HEADER
@@ -145,5 +161,20 @@ struct ROOM_CHAT_NOTIFY_PACKET : public PACKET_HEADER
 	char UserID[MAX_USER_ID_LEN + 1] = { 0, };
 	char Msg[MAX_CHAT_MSG_SIZE + 1] = { 0, };
 };
+
+
+// 유저 정보 패킷
+struct USER_DATA_PACKET : public PACKET_HEADER
+{
+	UINT32 userIndex;
+	char userId[64];       
+	INT32 roomIndex;
+	UINT32 domainState;      // DOMAIN_STATE enum값 (예: 0=NONE,1=LOGIN,2=ROOM)
+};
+
+
 #pragma pack(pop) //위에 설정된 패킹설정이 사라짐
+
+
+
 

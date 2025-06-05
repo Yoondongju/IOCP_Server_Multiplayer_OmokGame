@@ -7,10 +7,10 @@
 
 
 //클라이언트 정보를 담기위한 구조체
-class stClientInfo
+class ClientInfo
 {
 public:
-	stClientInfo()
+	ClientInfo()
 	{
 		ZeroMemory(&mRecvOverlappedEx, sizeof(stOverlappedEx));
 		mSocket = INVALID_SOCKET;
@@ -33,7 +33,7 @@ public:
 	char* RecvBuffer() { return mRecvBuf; }
 
 
-	bool OnConnect(HANDLE iocpHandle_, SOCKET socket_)
+	bool OnConnect(SOCKET socket_)
 	{
 		mSocket = socket_;
 		mIsConnect = 1;
@@ -41,7 +41,7 @@ public:
 		Clear();
 
 		//I/O Completion Port객체와 소켓을 연결시킨다.
-		if (BindIOCompletionPort(iocpHandle_) == false)
+		if (BindIOCompletionPort(mIOCPHandle) == false)
 		{
 			return false;
 		}
@@ -78,7 +78,7 @@ public:
 
 	bool PostAccept(SOCKET listenSock_, const UINT64 curTimeSec_)
 	{
-		printf_s("PostAccept client Index: %d\n", GetIndex());
+		printf_s("%d 번째 클라연결용 ListenSocket 개방..\n", GetIndex());
 
 		mLatestClosedTimeSec = UINT32_MAX;
 
@@ -99,6 +99,7 @@ public:
 		mAcceptContext.m_eOperation = IOOperation::ACCEPT;
 		mAcceptContext.SessionIndex = mIndex;
 
+		// 미리 mAcceptContext용 구조체를 세팅해놨다
 		if (FALSE == AcceptEx(listenSock_, mSocket, mAcceptBuf, 0,
 			sizeof(SOCKADDR_IN) + 16, sizeof(SOCKADDR_IN) + 16, &bytes, (LPWSAOVERLAPPED) & (mAcceptContext)))
 		{
@@ -114,18 +115,19 @@ public:
 
 	bool AcceptCompletion()
 	{
-		printf_s("AcceptCompletion : SessionIndex(%d)\n", mIndex);
-
-		if (OnConnect(mIOCPHandle, mSocket) == false)
+		if (OnConnect(mSocket) == false)	// 연결실패?
 		{
+			printf_s("서버에 연결 실패된 클라이언트의 인덱스: %d번입니다.\n", mIndex);
 			return false;
 		}
+
+		printf_s("서버에 연결된 클라이언트의 인덱스: %d번입니다.\n", mIndex);
 
 		SOCKADDR_IN		stClientAddr;
 		int nAddrLen = sizeof(SOCKADDR_IN);
 		char clientIP[32] = { 0, };
 		inet_ntop(AF_INET, &(stClientAddr.sin_addr), clientIP, 32 - 1);
-		printf("클라이언트 접속 : IP(%s) SOCKET(%d)\n", clientIP, (int)mSocket);
+		printf("클라이언트 접속: IP(%s) SOCKET(%d)\n", clientIP, (int)mSocket);
 		
 		return true;
 	}
@@ -198,7 +200,7 @@ public:
 
 	void SendCompleted(const UINT32 dataSize_)
 	{		
-		printf("[송신 완료] bytes : %d\n", dataSize_);
+		//printf("[송신 완료] bytes : %d\n", dataSize_);
 
 		std::lock_guard<std::mutex> guard(mSendLock);
 

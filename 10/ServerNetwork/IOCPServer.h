@@ -155,8 +155,8 @@ private:
 	{
 		for (UINT32 i = 0; i < maxClientCount_; ++i)
 		{
-			auto client = new stClientInfo;
-			client->Init(i, mIOCPHandle);
+			auto client = new ClientInfo;
+			client->Init(i, mIOCPHandle);		// 클라풀은 이미 자기의 인덱스를 알고잇음
 
 			mClientInfos.push_back(client);
 		}
@@ -177,7 +177,7 @@ private:
 	}
 	
 	//사용하지 않는 클라이언트 정보 구조체를 반환한다.
-	stClientInfo* GetEmptyClientInfo()
+	ClientInfo* GetEmptyClientInfo()
 	{
 		for (auto& client : mClientInfos)
 		{
@@ -190,7 +190,7 @@ private:
 		return nullptr;
 	}
 
-	stClientInfo* GetClientInfo(const UINT32 clientIndex_)
+	ClientInfo* GetClientInfo(const UINT32 clientIndex_)
 	{
 		return mClientInfos[clientIndex_];		
 	}
@@ -208,7 +208,7 @@ private:
 	void WokerThread()
 	{
 		//CompletionKey를 받을 포인터 변수
-		stClientInfo* pClientInfo = nullptr;
+		ClientInfo* pClientInfo = nullptr;
 		//함수 호출 성공 여부
 		BOOL bSuccess = TRUE;
 		//Overlapped I/O작업에서 전송된 데이터 크기
@@ -218,6 +218,7 @@ private:
 
 		while (mIsWorkerRun)
 		{
+			//클라이언트가 connect() → 윈도우 커널이 서버의 AcceptEx() 요청을 완료시킴
 			bSuccess = GetQueuedCompletionStatus(mIOCPHandle,
 				&dwIoSize,					// 실제로 전송된 바이트
 				(PULONG_PTR)&pClientInfo,		// CompletionKey
@@ -315,7 +316,7 @@ private:
 	}
 	
 	//소켓의 연결을 종료 시킨다.
-	void CloseSocket(stClientInfo* clientInfo_, bool isForce_ = false)
+	void CloseSocket(ClientInfo* clientInfo_, bool isForce_ = false)
 	{
 		if (clientInfo_->IsConnectd() == false)
 		{
@@ -334,7 +335,7 @@ private:
 	UINT32 MaxIOWorkerThreadCount = 0;
 
 	//클라이언트 정보 저장 구조체
-	std::vector<stClientInfo*> mClientInfos;
+	std::vector<ClientInfo*> mClientInfos;
 
 	//클라이언트의 접속을 받기위한 리슨 소켓
 	SOCKET		mListenSocket = INVALID_SOCKET;

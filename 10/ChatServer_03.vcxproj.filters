@@ -3,19 +3,16 @@
   <ItemGroup>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="PacketManager.cpp" />
+    <ClCompile Include="MyDBManager.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Packet.h" />
     <ClInclude Include="User.h" />
     <ClInclude Include="UserManager.h" />
     <ClInclude Include="ChatServer.h" />
-    <ClInclude Include="ErrorCode.h" />
     <ClInclude Include="PacketManager.h" />
     <ClInclude Include="Room.h" />
     <ClInclude Include="RoomManager.h" />
-    <ClInclude Include="ServerNetwork\ClientInfo.h">
-      <Filter>ServerNetwork</Filter>
-    </ClInclude>
     <ClInclude Include="ServerNetwork\Define.h">
       <Filter>ServerNetwork</Filter>
     </ClInclude>
@@ -24,6 +21,13 @@
     </ClInclude>
     <ClInclude Include="RedisManager.h" />
     <ClInclude Include="RedisTaskDefine.h" />
+    <ClInclude Include="MyDBManager.h" />
+    <ClInclude Include="ErrorCode.h">
+      <Filter>ServerNetwork</Filter>
+    </ClInclude>
+    <ClInclude Include="ServerNetwork\ClientInfo.h">
+      <Filter>ServerNetwork</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="ServerNetwork">

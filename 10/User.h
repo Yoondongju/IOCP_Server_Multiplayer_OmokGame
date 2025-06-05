@@ -11,8 +11,8 @@ public:
 	enum class DOMAIN_STATE 
 	{
 		NONE = 0,
-		LOGIN = 1,
-		ROOM = 2
+		LOGIN = 1 << 0,
+		ROOM = 1 << 1,
 	};
 
 
@@ -142,4 +142,20 @@ private:
 	UINT32 mPakcetDataBufferRPos = 0;
 	char* mPakcetDataBuffer = nullptr;
 };
+
+
+// 비트켬
+inline User::DOMAIN_STATE operator|(User::DOMAIN_STATE a, User::DOMAIN_STATE b) {   
+	return static_cast<User::DOMAIN_STATE>(static_cast<int>(a) | static_cast<int>(b));
+}
+
+// 비트 겹치는거 
+inline User::DOMAIN_STATE operator&(User::DOMAIN_STATE a, User::DOMAIN_STATE b) {
+	return static_cast<User::DOMAIN_STATE>(static_cast<int>(a) & static_cast<int>(b));
+}
+
+// 비트 반전
+inline User::DOMAIN_STATE operator~(User::DOMAIN_STATE a) {
+	return static_cast<User::DOMAIN_STATE>(~static_cast<int>(a));
+}
 
