@@ -30,5 +30,13 @@ enum class ERROR_CODE : unsigned short
 	CHAT_ROOM_INVALID_ROOM_NUMBER = 81,   // 채팅: 유효하지 않은 채팅방 번호
 
 	LOGIN_DB_ERROR = 99,                  // 로그인: 데이터베이스 에러
-	LOGIN_USER_NOT_FOUND = 100            // 로그인: 유저를 찾을 수 없음
+	LOGIN_USER_NOT_FOUND = 100,           // 로그인: 유저를 찾을 수 없음
+
+
+	STONE_ALREADY_EXISTS = 111,         // 이미 돌이 놓여 있음
+	//STONE_VIOLATES_33_RULE = 112,     // 구현 어려움 일단 대기
+	STONE_NOT_YOUR_TURN = 113,          // 자기 차례가 아님
+	STONE_OUT_OF_BOUNDS = 114,          // 범위를 벗어난 좌표
+	STONE_GAME_NOT_PLAYING = 115,       // 게임이 진행중이지 않음 
+	STONE_GAME_ALREADY_PLAYING = 116,	// 이미 게임중 
 };

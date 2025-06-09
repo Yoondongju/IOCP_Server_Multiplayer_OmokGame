@@ -91,6 +91,7 @@
   <ItemGroup>
     <ClInclude Include="ChatServer.h" />
     <ClInclude Include="ErrorCode.h" />
+    <ClInclude Include="GameManager.h" />
     <ClInclude Include="MyDBManager.h" />
     <ClInclude Include="Packet.h" />
     <ClInclude Include="PacketManager.h" />
@@ -105,6 +106,7 @@
     <ClInclude Include="UserManager.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="GameManager.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="MyDBManager.cpp" />
     <ClCompile Include="PacketManager.cpp" />

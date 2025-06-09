@@ -4,6 +4,7 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="PacketManager.cpp" />
     <ClCompile Include="MyDBManager.cpp" />
+    <ClCompile Include="GameManager.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Packet.h" />
@@ -28,6 +29,7 @@
     <ClInclude Include="ServerNetwork\ClientInfo.h">
       <Filter>ServerNetwork</Filter>
     </ClInclude>
+    <ClInclude Include="GameManager.h" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="ServerNetwork">

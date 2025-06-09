@@ -14,6 +14,7 @@ class UserManager;
 class RoomManager;
 class RedisManager;
 class MyDBManager;
+class GameManager;
 
 
 class PacketManager {
@@ -62,8 +63,15 @@ private:
 	void ProcessLeaveRoom(UINT32 clientIndex_, UINT16 packetSize_, char* pPacket_);
 	void ProcessRoomChatMessage(UINT32 clientIndex_, UINT16 packetSize_, char* pPacket_);
 
+	
 	void ProcessUserData(UINT32 clientIndex_, UINT16 packetSize_, char* pPacket_);
 	
+	void ProcessStartGame(UINT32 clientIndex_, UINT16 packetSize_, char* pPacket_);
+	void ProcessStoneLogic(UINT32 clientIndex_, UINT16 packetSize_, char* pPacket_);
+
+
+	bool ContainsHangul(const CHAR* str);
+	bool IsInvalidUserID(const CHAR* pUserID);
 
 
 	typedef void(PacketManager::* PROCESS_RECV_PACKET_FUNCTION)(UINT32, UINT16, char*);
@@ -73,6 +81,8 @@ private:
 	RoomManager* mRoomManager;	
 	RedisManager* mRedisMgr;
 	MyDBManager* mDBMgr;
+	GameManager* mGameMgr;
+
 		
 	std::function<void(int, char*)> mSendMQDataFunc;	// ¾È¾´´Ù?
 

@@ -18,7 +18,7 @@ public:
 		for (auto i = 0; i < mMaxUserCnt; i++)
 		{
 			mUserObjPool[i] = new User();
-			mUserObjPool[i]->Init(i);
+			mUserObjPool[i]->Init(i);			
 		}
 	}
 
@@ -30,7 +30,7 @@ public:
 	{
 		auto user_idx = clientIndex_;
 
-		mUserObjPool[user_idx]->SetLogin(userID_);
+		mUserObjPool[user_idx]->SetLogin(userID_);		// 유저 풀에서 걍 유저를 생성해놓은다음 그 유저가 잇는 인덱스 == 클라 인덱스
 		mUserIDDictionary.insert(std::pair< char*, int>(userID_, clientIndex_));
 
 		IncreaseUserCnt();
@@ -38,7 +38,7 @@ public:
 		return ERROR_CODE::NONE;
 	}
 		
-	INT32 FindUserIndexByID(char* userID_)
+	INT32 FindUserIndexByID(const char* userID_)	
 	{
 		if (auto res = mUserIDDictionary.find(userID_); res != mUserIDDictionary.end())
 		{

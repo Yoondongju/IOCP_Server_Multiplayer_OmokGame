@@ -8,7 +8,7 @@
 #include "RoomManager.h"
 #include "PacketManager.h"
 #include "RedisManager.h"
-
+#include "GameManager.h"
 
 
 void PacketManager::Init(const UINT32 maxClient_)
@@ -28,7 +28,13 @@ void PacketManager::Init(const UINT32 maxClient_)
 	mRecvFuntionDictionary[(int)PACKET_ID::ROOM_LEAVE_REQUEST] = &PacketManager::ProcessLeaveRoom;
 	mRecvFuntionDictionary[(int)PACKET_ID::ROOM_CHAT_REQUEST] = &PacketManager::ProcessRoomChatMessage;
 				
+
 	mRecvFuntionDictionary[(int)PACKET_ID::USER_DATA_REQUEST] = &PacketManager::ProcessUserData;
+
+
+	mRecvFuntionDictionary[(int)PACKET_ID::PUT_STONE_REQUEST_PACKET] = &PacketManager::ProcessStartGame;
+	mRecvFuntionDictionary[(int)PACKET_ID::PUT_STONE_REQUEST_PACKET] = &PacketManager::ProcessStoneLogic;
+
 
 	CreateCompent(maxClient_);
 
@@ -36,6 +42,8 @@ void PacketManager::Init(const UINT32 maxClient_)
 	mDBMgr = new MyDBManager;
 	if (!mDBMgr->IsConnected())
 		mDBMgr->Connect();
+
+	mGameMgr = new GameManager;
 }
 
 void PacketManager::CreateCompent(const UINT32 maxClient_)
@@ -122,7 +130,7 @@ PacketInfo PacketManager::DequePacketData()
 			return PacketInfo();
 		}
 
-		userIndex = mInComingPacketUserIndex.front();
+		userIndex = mInComingPacketUserIndex.front();	// 이게 패킷보낸 클라의 인덱스다!
 		mInComingPacketUserIndex.pop_front();
 	}
 
@@ -212,6 +220,17 @@ void PacketManager::ProcessUserDisConnect(UINT32 clientIndex_, UINT16 packetSize
 void PacketManager::ProcessRegister(UINT32 clientIndex_, UINT16 packetSize_, char* pPacket_)
 {
 	REGISTER_REQUEST_PACKET* pRegisterPacket = (REGISTER_REQUEST_PACKET*)pPacket_;
+	REGISTER_RESPONSE_PACKET resPacket{};
+
+	if (IsInvalidUserID(pRegisterPacket->UserID))
+	{
+		// 문제가 있는 ID였더라면
+		resPacket.PacketId = (UINT16)PACKET_ID::REGISTER_RESPONSE;
+		resPacket.Result = (UINT16)ERROR_CODE::USER_MGR_INVALID_USER_UNIQUEID;
+		SendPacketFunc(clientIndex_, sizeof(REGISTER_RESPONSE_PACKET), (char*)&resPacket);
+		return;
+	}
+
 
 	char query[512];
 	snprintf(query, sizeof(query),
@@ -220,10 +239,9 @@ void PacketManager::ProcessRegister(UINT32 clientIndex_, UINT16 packetSize_, cha
 
 
 	MYSQL* const sqlconn = mDBMgr->Get_SqlConn();
-
 	int queryResult = mysql_query(sqlconn, query);
 
-	REGISTER_RESPONSE_PACKET resPacket{};
+	
 	resPacket.PacketId = (UINT16)PACKET_ID::REGISTER_RESPONSE;
 
 	if (queryResult != 0)
@@ -246,9 +264,7 @@ void PacketManager::ProcessRegister(UINT32 clientIndex_, UINT16 packetSize_, cha
 		resPacket.Result = 0; // 성공
 	}
 
-	resPacket.PacketLength = sizeof(resPacket);
-
-	SendPacketFunc(clientIndex_, sizeof(resPacket), (char*)&resPacket);
+	SendPacketFunc(clientIndex_, sizeof(REGISTER_RESPONSE_PACKET), (char*)&resPacket);
 }
 
 void PacketManager::ProcessLogin(UINT32 clientIndex_, UINT16 packetSize_, char* pPacket_)
@@ -268,6 +284,7 @@ void PacketManager::ProcessLogin(UINT32 clientIndex_, UINT16 packetSize_, char* 
 	loginResPacket.PacketId = (UINT16)PACKET_ID::LOGIN_RESPONSE;
 	loginResPacket.PacketLength = sizeof(LOGIN_RESPONSE_PACKET);
 
+	
 	if (mUserManager->GetCurrentUserCnt() >= mUserManager->GetMaxUserCnt()) 
 	{ 
 		//접속자수가 최대수를 차지해서 접속불가
@@ -325,7 +342,7 @@ void PacketManager::ProcessLogin(UINT32 clientIndex_, UINT16 packetSize_, char* 
 			// 로그인 성공
 			loginResPacket.Result = (UINT16)ERROR_CODE::NONE;
 	
-			mUserManager->AddUser(pLoginReqPacket->UserID, mUserManager->GetCurrentUserCnt());
+			mUserManager->AddUser(pLoginReqPacket->UserID, clientIndex_);
 		}
 		else
 		{
@@ -377,7 +394,30 @@ void PacketManager::ProcessEnterRoom(UINT32 clientIndex_, UINT16 packetSize_, ch
 				
 	roomEnterResPacket.Result = mRoomManager->EnterUser(pRoomEnterReqPacket->RoomNumber, pUser);
 
-	SendPacketFunc(clientIndex_, sizeof(ROOM_ENTER_RESPONSE_PACKET), (char*)&roomEnterResPacket);
+	if (roomEnterResPacket.Result == (UINT16)ERROR_CODE::NONE)
+	{
+		Room* pCurRoom = mRoomManager->GetRoomByNumber(pRoomEnterReqPacket->RoomNumber);	
+		const std::list<User*>& UserList = pCurRoom->Get_Users();
+
+		roomEnterResPacket.UserCntInRoom = UserList.size();
+		roomEnterResPacket.RoomNumber = pRoomEnterReqPacket->RoomNumber;	// 현재 방 번호	
+
+		int iCnt = 0;
+		for (auto User : UserList)
+		{
+			strncpy(roomEnterResPacket.UserIDList[iCnt], User->GetUserId().c_str(), sizeof(roomEnterResPacket.UserIDList[iCnt]));
+			roomEnterResPacket.UserIDList[iCnt][sizeof(roomEnterResPacket.UserIDList[iCnt]) - 1] = '\0'; // 널 종료 보장		 
+			++iCnt;
+		}
+		
+		for (auto User : UserList)
+		{
+			SendPacketFunc(User->GetNetConnIdx() , sizeof(ROOM_ENTER_RESPONSE_PACKET), (char*)&roomEnterResPacket);
+		}
+	}
+	else
+		SendPacketFunc(clientIndex_, sizeof(ROOM_ENTER_RESPONSE_PACKET), (char*)&roomEnterResPacket);
+
 }
 
 
@@ -393,9 +433,30 @@ void PacketManager::ProcessLeaveRoom(UINT32 clientIndex_, UINT16 packetSize_, ch
 	auto reqUser = mUserManager->GetUserByConnIdx(clientIndex_);
 	auto roomNum = reqUser->GetCurrentRoom();
 				
+
 	//TODO Room안의 UserList객체의 값 확인하기
 	roomLeaveResPacket.Result = mRoomManager->LeaveUser(roomNum, reqUser);
 	SendPacketFunc(clientIndex_, sizeof(ROOM_LEAVE_RESPONSE_PACKET), (char*)&roomLeaveResPacket);
+
+
+
+	ROOM_LEAVE_NOTIFY_PACKET roomLeaveNotify;
+	roomLeaveNotify.PacketId = (UINT16)PACKET_ID::ROOM_LEAVE_NOTIFY;
+	roomLeaveNotify.PacketLength = sizeof(ROOM_LEAVE_NOTIFY_PACKET);
+	roomLeaveNotify.Result = (UINT16)ERROR_CODE::NONE;
+
+	UINT iCnt = 0;
+	auto& Users = mRoomManager->GetRoomByNumber(roomNum)->Get_Users();
+	roomLeaveNotify.UserCntInRoom = Users.size();
+
+	for (auto user : Users)
+	{	
+		strncpy(roomLeaveNotify.UserIDList[iCnt], user->GetUserId().c_str(), sizeof(roomLeaveNotify.UserIDList[iCnt]));
+		roomLeaveNotify.UserIDList[iCnt][sizeof(roomLeaveNotify.UserIDList[iCnt]) - 1] = '\0'; // 널 종료 보장		 
+		++iCnt;
+
+		SendPacketFunc(user->GetNetConnIdx(), sizeof(ROOM_LEAVE_NOTIFY_PACKET), (char*)&roomLeaveNotify);
+	}
 }
 
 
@@ -426,6 +487,7 @@ void PacketManager::ProcessRoomChatMessage(UINT32 clientIndex_, UINT16 packetSiz
 	pRoom->NotifyChat(clientIndex_, reqUser->GetUserId().c_str(), pRoomChatReqPacketet->Message);		
 }
 
+
 void PacketManager::ProcessUserData(UINT32 clientIndex_, UINT16 packetSize_, char* pPacket_)
 {
 	UNREFERENCED_PARAMETER(packetSize_);
@@ -446,11 +508,85 @@ void PacketManager::ProcessUserData(UINT32 clientIndex_, UINT16 packetSize_, cha
 
 
 	strncpy(UserDataPacket.userId, pReqUser->GetUserId().c_str(), sizeof(UserDataPacket.userId));
-	UserDataPacket.userId[sizeof(UserDataPacket.userId) - 1] = '\0'; // 널 종료 보장
+	UserDataPacket.userId[sizeof(UserDataPacket.userId) - 1] = '\0';	// 널 종료 보장
 	UserDataPacket.userIndex = pReqUser->GetNetConnIdx();
 	UserDataPacket.domainState = (UINT32)pReqUser->GetDomainState();
-	UserDataPacket.roomIndex = pReqUser->GetCurrentRoom();	// -1가면 방없음임
+	UserDataPacket.roomIndex = pReqUser->GetCurrentRoom();				// -1가면 방없음임
 
 	SendPacketFunc(clientIndex_, sizeof(USER_DATA_PACKET), (char*)&UserDataPacket);
+}
+
+void PacketManager::ProcessStartGame(UINT32 clientIndex_, UINT16 packetSize_, char* pPacket_)
+{
+	UNREFERENCED_PARAMETER(packetSize_);
+	UNREFERENCED_PARAMETER(pPacket_);
+
+	auto pRequestpacket = reinterpret_cast<START_GAME_REQUEST_PACKET*>(pPacket_);
+
+	INT32 roomIndex = pRequestpacket->roomIndex;
+	int TurnIndex = pRequestpacket->TurnIndex;
+
+
+	START_GAME_RESPONSE_PACKET packet;
+	packet.PacketId = (UINT16)PACKET_ID::START_GAME_RESPONSE_PACKET;
+	packet.PacketLength = sizeof(START_GAME_RESPONSE_PACKET);
+
+	packet.Result = (INT16)mGameMgr->CheckGamePlay(roomIndex, TurnIndex, mRoomManager);
+	
+	SendPacketFunc(clientIndex_, sizeof(START_GAME_RESPONSE_PACKET), (char*)&packet);
+}
+
+void PacketManager::ProcessStoneLogic(UINT32 clientIndex_, UINT16 packetSize_, char* pPacket_)
+{
+	UNREFERENCED_PARAMETER(packetSize_);
+	UNREFERENCED_PARAMETER(pPacket_);
+
+	auto pRequestpacket = reinterpret_cast<PUT_STONE_REQUEST_PACKET*>(pPacket_);
+
+	INT16 row = pRequestpacket->row;
+	INT16 col = pRequestpacket->col;
+	int** board = pRequestpacket->board;
+	INT16 boardSize = pRequestpacket->BoardSize;
+	INT32 roomIndex = pRequestpacket->roomIndex;
+
+	PUT_STONE_RESPONSE_PACKET packet;
+	packet.PacketId = (UINT16)PACKET_ID::PUT_STONE_RESPONSE_PACKET;
+	packet.PacketLength = sizeof(PUT_STONE_RESPONSE_PACKET);
+
+	packet.Result = (INT16)mGameMgr->CheckPutStone(clientIndex_, row, col, board, boardSize, roomIndex, mRoomManager);
+	
+	SendPacketFunc(clientIndex_, sizeof(PUT_STONE_RESPONSE_PACKET), (char*)&packet);
+}
+
+bool PacketManager::ContainsHangul(const CHAR* str)
+{
+	while (*str) {
+		// Unicode 한글 범위: 0xAC00 ~ 0xD7A3
+		if (*str >= 0xAC00 && *str <= 0xD7A3) {
+			return true;
+		}
+		++str;
+	}
+	return false;
+}
+
+bool PacketManager::IsInvalidUserID(const CHAR* pUserID)
+{
+	if (pUserID == nullptr || strlen(pUserID) == 0)
+		return true;
+
+	// 공백 검사
+	for (int i = 0; pUserID[i]; ++i) {
+		if (isspace(pUserID[i])) {
+			return true;
+		}
+	}
+
+	// 한글 포함 여부
+	if (ContainsHangul(pUserID)) {
+		return true;
+	}
+
+	return false;
 }
 

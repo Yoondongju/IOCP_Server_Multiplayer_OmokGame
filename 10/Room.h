@@ -3,6 +3,8 @@
 #include "UserManager.h"
 #include "Packet.h"
 
+#include "ErrorCode.h"
+
 #include <functional>
 
 
@@ -12,12 +14,56 @@ public:
 	Room() = default;
 	~Room() = default;
 
+
+	ERROR_CODE IsPlaying()
+	{
+		if (false == mIsPlaying)
+		{
+			return ERROR_CODE::STONE_GAME_NOT_PLAYING;
+		}
+		return ERROR_CODE::NONE;
+	}
+
+	ERROR_CODE IsValidPosition(INT16 row, INT16 col, int** Board ,INT16 BoardSize)
+	{		
+		if (row < 0 || row > BoardSize || col < 0 || col > BoardSize)
+		{
+			return ERROR_CODE::STONE_OUT_OF_BOUNDS;
+		}
+		else
+			return ERROR_CODE::NONE;
+	}
+
+	ERROR_CODE IsStonePlaced(INT16 row, INT16 col, int** Board, INT16 BoardSize)
+	{
+		if( 0 != Board[row][col])
+			return ERROR_CODE::STONE_ALREADY_EXISTS;
+		else 
+			return ERROR_CODE::NONE;
+	}
+
+	ERROR_CODE IsUserTurn(UINT32 clientIndex)
+	{
+		if (clientIndex != mCurrentTurnClientIndex)
+			return ERROR_CODE::STONE_NOT_YOUR_TURN;
+
+		return ERROR_CODE::NONE;
+	}
+
+
+
+	void Change_CurTurnClientIndex(int ClientIndex) { mCurrentTurnClientIndex = ClientIndex; }
+	void Start_GamePlay() { mIsPlaying = true; }
+
+
+
 	INT32 GetMaxUserCount() { return mMaxUserCount; }
 
 	INT32 GetCurrentUserCount() { return mCurrentUserCount; }
 
 	INT32 GetRoomNumber() { return mRoomNum; }
 
+	const std::list<User*>& Get_Users() { return mUserList; }
 	
 	void Init(const INT32 roomNum_, const INT32 maxUserCount_)
 	{
@@ -48,6 +94,8 @@ public:
 		
 	void LeaveUser(User* leaveUser_)
 	{
+		--mCurrentUserCount;
+
 		mUserList.remove_if([leaveUserId = leaveUser_->GetUserId()](User* pUser) {
 			return leaveUserId == pUser->GetUserId();
 		});
@@ -86,6 +134,8 @@ private:
 
 
 	INT32 mRoomNum = -1;
+	int mCurrentTurnClientIndex = -1;	// 누구 턴이니 
+	bool mIsPlaying = false;
 
 	std::list<User*> mUserList;
 		

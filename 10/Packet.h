@@ -70,6 +70,7 @@ enum class  PACKET_ID : UINT16   // 전송 크기를 줄일 수 있고, 구조체 정렬도 최적
 
 	ROOM_LEAVE_REQUEST = 215,
 	ROOM_LEAVE_RESPONSE = 216,
+	ROOM_LEAVE_NOTIFY = 217,
 
 	ROOM_CHAT_REQUEST = 221,
 	ROOM_CHAT_RESPONSE = 222,
@@ -77,6 +78,15 @@ enum class  PACKET_ID : UINT16   // 전송 크기를 줄일 수 있고, 구조체 정렬도 최적
 
 	USER_DATA_REQUEST = 224,
 	USER_DATA_RESPONSE = 225,
+
+
+	START_GAME_REQUEST_PACKET = 248,
+	START_GAME_RESPONSE_PACKET = 249,
+
+	PUT_STONE_REQUEST_PACKET = 250,
+	PUT_STONE_RESPONSE_PACKET = 251,
+	PUT_STONE_NOTIFY_PACKET = 252
+
 };
 
 
@@ -91,6 +101,7 @@ struct PACKET_HEADER
 const UINT32 PACKET_HEADER_LENGTH = sizeof(PACKET_HEADER);
 
 //- 로그인 요청
+const int MAX_USER_COUNT = 20;
 const int MAX_USER_ID_LEN = 32;
 const int MAX_USER_PW_LEN = 32;
 
@@ -129,8 +140,10 @@ struct ROOM_ENTER_REQUEST_PACKET : public PACKET_HEADER
 
 struct ROOM_ENTER_RESPONSE_PACKET : public PACKET_HEADER
 {
-	INT16 Result;
-	//char RivalUserID[MAX_USER_ID_LEN + 1] = { 0, };
+	INT32 RoomNumber;
+	INT32 UserCntInRoom;
+	INT16 Result;	
+	char UserIDList[MAX_USER_COUNT][MAX_USER_ID_LEN + 1] = { 0 };
 };
 
 
@@ -143,6 +156,15 @@ struct ROOM_LEAVE_RESPONSE_PACKET : public PACKET_HEADER
 {
 	INT16 Result;
 };
+
+struct ROOM_LEAVE_NOTIFY_PACKET : public PACKET_HEADER
+{
+	INT32 UserCntInRoom;
+	INT16 Result;
+	char UserIDList[MAX_USER_COUNT][MAX_USER_ID_LEN + 1] = { 0 };
+};
+
+
 
 // 룸 채팅
 const int MAX_CHAT_MSG_SIZE = 256;
@@ -162,7 +184,6 @@ struct ROOM_CHAT_NOTIFY_PACKET : public PACKET_HEADER
 	char Msg[MAX_CHAT_MSG_SIZE + 1] = { 0, };
 };
 
-
 // 유저 정보 패킷
 struct USER_DATA_PACKET : public PACKET_HEADER
 {
@@ -171,6 +192,45 @@ struct USER_DATA_PACKET : public PACKET_HEADER
 	INT32 roomIndex;
 	UINT32 domainState;      // DOMAIN_STATE enum값 (예: 0=NONE,1=LOGIN,2=ROOM)
 };
+
+struct START_GAME_REQUEST_PACKET : public PACKET_HEADER
+{
+	INT32 roomIndex;
+	int TurnIndex;
+};
+
+struct START_GAME_RESPONSE_PACKET : public PACKET_HEADER
+{
+	INT16 Result;
+};
+
+
+
+struct PUT_STONE_REQUEST_PACKET : public PACKET_HEADER
+{
+	INT32 roomIndex;
+	INT16 BoardSize;
+	INT16 row;
+	INT16 col;
+	int** board;
+};
+
+struct PUT_STONE_RESPONSE_PACKET : public PACKET_HEADER
+{
+	INT16 row;
+	INT16 col;
+	INT16 Result;
+
+	INT8 stoneColor; // 1: 흑, 2: 백
+};
+
+struct PUT_STONE_NOTIFY_PACKET : public PACKET_HEADER
+{
+	INT16 row;
+	INT16 col;
+	INT8 stoneColor; // 1: 흑, 2: 백
+};
+
 
 
 #pragma pack(pop) //위에 설정된 패킹설정이 사라짐
