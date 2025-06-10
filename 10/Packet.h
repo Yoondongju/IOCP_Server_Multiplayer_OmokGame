@@ -195,8 +195,10 @@ struct USER_DATA_PACKET : public PACKET_HEADER
 
 struct START_GAME_REQUEST_PACKET : public PACKET_HEADER
 {
+	char userId[64];
 	INT32 roomIndex;
 	int TurnIndex;
+	INT16 BoardSize;
 };
 
 struct START_GAME_RESPONSE_PACKET : public PACKET_HEADER
@@ -209,10 +211,8 @@ struct START_GAME_RESPONSE_PACKET : public PACKET_HEADER
 struct PUT_STONE_REQUEST_PACKET : public PACKET_HEADER
 {
 	INT32 roomIndex;
-	INT16 BoardSize;
 	INT16 row;
 	INT16 col;
-	int** board;
 };
 
 struct PUT_STONE_RESPONSE_PACKET : public PACKET_HEADER
@@ -228,6 +228,7 @@ struct PUT_STONE_NOTIFY_PACKET : public PACKET_HEADER
 {
 	INT16 row;
 	INT16 col;
+	INT16 Result;
 	INT8 stoneColor; // 1: Èæ, 2: ¹é
 };
 

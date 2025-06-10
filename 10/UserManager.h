@@ -45,7 +45,7 @@ public:
 			return (*res).second;		// 유저를 발견햇단 소리고
 		}
 			
-		return -1;						// 신입이엿어
+		return -1;						// 없어
 	}
 		
 	void DeleteUserInfo(User* user_)

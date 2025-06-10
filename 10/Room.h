@@ -26,7 +26,7 @@ public:
 
 	ERROR_CODE IsValidPosition(INT16 row, INT16 col, int** Board ,INT16 BoardSize)
 	{		
-		if (row < 0 || row > BoardSize || col < 0 || col > BoardSize)
+		if (row < 0 || row >= BoardSize || col < 0 || col >= BoardSize)
 		{
 			return ERROR_CODE::STONE_OUT_OF_BOUNDS;
 		}
@@ -44,7 +44,7 @@ public:
 
 	ERROR_CODE IsUserTurn(UINT32 clientIndex)
 	{
-		if (clientIndex != mCurrentTurnClientIndex)
+		if (clientIndex == mCurrentTurnClientIndex)
 			return ERROR_CODE::STONE_NOT_YOUR_TURN;
 
 		return ERROR_CODE::NONE;

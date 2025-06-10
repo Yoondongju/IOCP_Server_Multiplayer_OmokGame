@@ -32,7 +32,7 @@ void PacketManager::Init(const UINT32 maxClient_)
 	mRecvFuntionDictionary[(int)PACKET_ID::USER_DATA_REQUEST] = &PacketManager::ProcessUserData;
 
 
-	mRecvFuntionDictionary[(int)PACKET_ID::PUT_STONE_REQUEST_PACKET] = &PacketManager::ProcessStartGame;
+	mRecvFuntionDictionary[(int)PACKET_ID::START_GAME_REQUEST_PACKET] = &PacketManager::ProcessStartGame;
 	mRecvFuntionDictionary[(int)PACKET_ID::PUT_STONE_REQUEST_PACKET] = &PacketManager::ProcessStoneLogic;
 
 
@@ -78,6 +78,8 @@ bool PacketManager::Run()
 
 void PacketManager::End()
 {
+	mGameMgr->Free();
+
 	mRedisMgr->End();
 	mDBMgr->Disconnect();
 
@@ -487,7 +489,6 @@ void PacketManager::ProcessRoomChatMessage(UINT32 clientIndex_, UINT16 packetSiz
 	pRoom->NotifyChat(clientIndex_, reqUser->GetUserId().c_str(), pRoomChatReqPacketet->Message);		
 }
 
-
 void PacketManager::ProcessUserData(UINT32 clientIndex_, UINT16 packetSize_, char* pPacket_)
 {
 	UNREFERENCED_PARAMETER(packetSize_);
@@ -523,15 +524,31 @@ void PacketManager::ProcessStartGame(UINT32 clientIndex_, UINT16 packetSize_, ch
 
 	auto pRequestpacket = reinterpret_cast<START_GAME_REQUEST_PACKET*>(pPacket_);
 
-	INT32 roomIndex = pRequestpacket->roomIndex;
+	INT32 RoomIndex = pRequestpacket->roomIndex;
 	int TurnIndex = pRequestpacket->TurnIndex;
+	INT16 BoardSize = pRequestpacket->BoardSize;
 
 
 	START_GAME_RESPONSE_PACKET packet;
 	packet.PacketId = (UINT16)PACKET_ID::START_GAME_RESPONSE_PACKET;
 	packet.PacketLength = sizeof(START_GAME_RESPONSE_PACKET);
 
-	packet.Result = (INT16)mGameMgr->CheckGamePlay(roomIndex, TurnIndex, mRoomManager);
+
+	INT32 UserIndex = mUserManager->FindUserIndexByID(pRequestpacket->userId);
+	if (-1 != UserIndex)
+	{
+		User* pCompanionUser = mUserManager->GetUserByConnIdx(UserIndex);
+		User* pMyUser = mUserManager->GetUserByConnIdx(clientIndex_);
+
+		pCompanionUser->StartPlaying();
+		pMyUser->StartPlaying();
+
+		packet.Result = (INT16)mGameMgr->CheckGamePlay(RoomIndex, TurnIndex, BoardSize, mRoomManager);
+	}
+	else
+		packet.Result = (INT16)ERROR_CODE::GAME_NOT_FOUND_USER;
+
+	
 	
 	SendPacketFunc(clientIndex_, sizeof(START_GAME_RESPONSE_PACKET), (char*)&packet);
 }
@@ -545,17 +562,46 @@ void PacketManager::ProcessStoneLogic(UINT32 clientIndex_, UINT16 packetSize_, c
 
 	INT16 row = pRequestpacket->row;
 	INT16 col = pRequestpacket->col;
-	int** board = pRequestpacket->board;
-	INT16 boardSize = pRequestpacket->BoardSize;
 	INT32 roomIndex = pRequestpacket->roomIndex;
 
 	PUT_STONE_RESPONSE_PACKET packet;
 	packet.PacketId = (UINT16)PACKET_ID::PUT_STONE_RESPONSE_PACKET;
 	packet.PacketLength = sizeof(PUT_STONE_RESPONSE_PACKET);
+	packet.row = row;
+	packet.col = col;	
+	packet.stoneColor = -1;
+	packet.Result = (INT16)mGameMgr->CheckPutStone(clientIndex_, row, col, roomIndex, mRoomManager);
 
-	packet.Result = (INT16)mGameMgr->CheckPutStone(clientIndex_, row, col, board, boardSize, roomIndex, mRoomManager);
-	
-	SendPacketFunc(clientIndex_, sizeof(PUT_STONE_RESPONSE_PACKET), (char*)&packet);
+	if ((INT16)ERROR_CODE::NONE == packet.Result)
+	{
+		packet.stoneColor = mGameMgr->Update_TurnIndex(row, col);
+
+
+		PUT_STONE_NOTIFY_PACKET Notifypacket;
+		Notifypacket.PacketId = (UINT16)PACKET_ID::PUT_STONE_NOTIFY_PACKET;
+		Notifypacket.PacketLength = sizeof(PUT_STONE_NOTIFY_PACKET);
+		Notifypacket.row = row;
+		Notifypacket.col = col;
+		Notifypacket.stoneColor = packet.stoneColor;
+		Notifypacket.Result = (INT16)ERROR_CODE::NONE;
+
+		bool isWin = mGameMgr->CheckWin(row, col, packet.stoneColor);
+		auto& Users = mRoomManager->GetRoomByNumber(roomIndex)->Get_Users();
+		for (auto user : Users)
+		{
+			if(true == user->IsPlaying() && isWin)
+			{
+				if (user->GetNetConnIdx() == clientIndex_)
+					Notifypacket.Result = (INT16)ERROR_CODE::GAME_WIN;
+				else
+					Notifypacket.Result = (INT16)ERROR_CODE::GAME_LOSE;
+			}
+
+			SendPacketFunc(user->GetNetConnIdx(), sizeof(PUT_STONE_NOTIFY_PACKET), (char*)&Notifypacket);
+		}
+	}
+
+	SendPacketFunc(clientIndex_, sizeof(PUT_STONE_RESPONSE_PACKET), (char*)&packet);	
 }
 
 bool PacketManager::ContainsHangul(const CHAR* str)

@@ -52,6 +52,10 @@ public:
 		
 	void SetDomainState(DOMAIN_STATE value_) { mCurDomainState = value_; }
 
+	void StartPlaying() { mIsPlaying = true; }
+	bool IsPlaying() { return mIsPlaying; }
+
+
 	INT32 GetCurrentRoom() 
 	{
 		return mRoomIndex;
@@ -135,7 +139,9 @@ private:
 	std::string mUserID;
 	bool mIsConfirm = false;
 	std::string mAuthToken;
-	
+
+	bool mIsPlaying = false;
+
 	DOMAIN_STATE mCurDomainState = DOMAIN_STATE::NONE;		
 
 	UINT32 mPakcetDataBufferWPos = 0;
