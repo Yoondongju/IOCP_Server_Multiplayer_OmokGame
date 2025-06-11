@@ -52,7 +52,9 @@ public:
 		
 	void SetDomainState(DOMAIN_STATE value_) { mCurDomainState = value_; }
 
+
 	void StartPlaying() { mIsPlaying = true; }
+	void EndPlay() { mIsPlaying = false; }
 	bool IsPlaying() { return mIsPlaying; }
 
 

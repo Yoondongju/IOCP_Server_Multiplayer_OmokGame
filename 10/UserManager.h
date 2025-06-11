@@ -38,14 +38,24 @@ public:
 		return ERROR_CODE::NONE;
 	}
 		
-	INT32 FindUserIndexByID(const char* userID_)	
+	INT32 FindUserIndexByID(const char* userID_ , INT32 clientIndex = -1)	
 	{
 		if (auto res = mUserIDDictionary.find(userID_); res != mUserIDDictionary.end())
 		{
-			return (*res).second;		// 유저를 발견햇단 소리고
+			return (*res).second;		// 다른 유저를 찾음
 		}
-			
+
 		return -1;						// 없어
+	}
+
+	bool FindMeIndexByID(const char* userID_, INT32 clientIndex)
+	{
+		if (auto res = mUserIDDictionary.find(userID_); res != mUserIDDictionary.end())
+		{
+			if (clientIndex == (*res).second)
+				return true;
+		}
+		return false;						// 없어
 	}
 		
 	void DeleteUserInfo(User* user_)

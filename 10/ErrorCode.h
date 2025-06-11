@@ -32,8 +32,12 @@ enum class ERROR_CODE : unsigned short
 	LOGIN_DB_ERROR = 99,                  // 로그인: 데이터베이스 에러
 	LOGIN_USER_NOT_FOUND = 100,           // 로그인: 유저를 찾을 수 없음
 
-	GAME_NOT_FOUND_USER = 101,			// 게임 시작전 유저를 못찾음
 
+	GAME_NOT_FOUND_USER = 101,			// 게임 시작전 유저를 못찾음
+	GAME_FOUND_USER_ME = 102,			// 찾으려는 유저가 본인임 
+
+	
+	STONE_GAME_OBSERVER = 110,			// 관전자 였어
 	STONE_ALREADY_EXISTS = 111,         // 이미 돌이 놓여 있음
 	//STONE_VIOLATES_33_RULE = 112,     // 구현 어려움 일단 대기   3 x 3
 	STONE_NOT_YOUR_TURN = 113,          // 자기 차례가 아님

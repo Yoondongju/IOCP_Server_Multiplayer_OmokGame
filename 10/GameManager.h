@@ -35,8 +35,10 @@ public:
         if (nullptr == mBoard)
             return -1;
 
+        mTurnIndex = 3 - mTurnIndex;
+
         mBoard[row][col] = mTurnIndex;  // 바둑돌 갱신
-        return mTurnIndex = 3 - mTurnIndex; 
+        return mTurnIndex;
     }
 
     ERROR_CODE CheckGamePlay(INT32 roomIndex, int TurnIndex, INT16 BoardSize, RoomManager* pRoomMgr);
@@ -53,7 +55,8 @@ public:
         {
             memset(mBoard[i], 0, sizeof(int) * mBoardSize); 
         }
-        mBoardSize = 0;
+
+        //mBoardSize = 0;   // 이건 안해줘도된다.
         mTurnIndex = 0;
     }
  

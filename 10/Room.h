@@ -54,6 +54,7 @@ public:
 
 	void Change_CurTurnClientIndex(int ClientIndex) { mCurrentTurnClientIndex = ClientIndex; }
 	void Start_GamePlay() { mIsPlaying = true; }
+	void End_GamePlay() { mIsPlaying = false; }
 
 
 

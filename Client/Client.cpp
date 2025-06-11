@@ -69,6 +69,7 @@ HWND g_hButtonEnterRoom;
 HWND g_hButtonLeaveRoom;
 HWND g_hButtonGameStart;
 HWND g_hUserList;
+HWND g_hComboRoom;
 
 HINSTANCE g_hInstance;
 HWND g_hWnd;
@@ -83,7 +84,10 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
 INT32 g_iRoomNum = 0;
 INT32 g_iUserCntInRoom = 0;
 char g_UserID[MAX_USER_COUNT][MAX_USER_ID_LEN + 1] = {};
-char g_SelectedID[MAX_USER_ID_LEN + 1];
+wchar_t g_SelectedID[MAX_USER_ID_LEN + 1] = { 0 };
+
+int g_SelectedRoomIndex = -1;
+
 
 std::vector<std::pair<std::string ,std::string>> g_ChatMessages; // 채팅 메시지 리스트
 
@@ -98,7 +102,6 @@ const int CHAT_START_Y = 380;
 std::string g_strMyID;
 std::string g_strMyPW;
 
-int RoomIndex = 0;
 
 LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
@@ -193,11 +196,15 @@ void RecvRoom(char* recvBuffer)
             ShowWindow(g_hButtonSignup, SW_HIDE);
             ShowWindow(g_hButtonLogin, SW_HIDE);
             ShowWindow(g_hButtonEnterRoom, SW_HIDE);
+            ShowWindow(g_hComboRoom, SW_HIDE);
 
             ShowWindow(g_hChatEdit, SW_SHOW);           // 채팅 입력창
             ShowWindow(g_hButtonLeaveRoom, SW_SHOW);    // 방 나가기
             ShowWindow(g_hButtonGameStart, SW_SHOW);    // 게임시작   
             ShowWindow(g_hUserList, SW_SHOW);
+
+
+            g_ChatMessages.clear();
         }
 
      
@@ -205,13 +212,19 @@ void RecvRoom(char* recvBuffer)
         g_iUserCntInRoom = response->UserCntInRoom;
         memcpy(g_UserID, response->UserIDList, sizeof(response->UserIDList));
 
+
+        SendMessage(g_hUserList, LB_RESETCONTENT, 0, 0);
+        wchar_t wUserID[MAX_USER_COUNT][MAX_USER_ID_LEN + 1];
         for (int i = 0; i < g_iUserCntInRoom; ++i)
         {
-            SendMessage(g_hUserList, LB_ADDSTRING, 0, ()g_UserID[i]);
+            MultiByteToWideChar(CP_ACP, 0, g_UserID[i], -1, wUserID[i], MAX_USER_ID_LEN + 1);
+            SendMessage(g_hUserList, LB_ADDSTRING, 0, (LPARAM)wUserID[i]);
         }
 
 
         InvalidateRect(g_hWnd, NULL, TRUE);
+
+        return;
     }
     else if (response->Result == (UINT16)ERROR_CODE::ROOM_INVALID_INDEX)
         MessageBox(g_hWnd, _T("유효 하지 않은 방 번호입니다.."), _T("실패"), MB_NOFOCUS | MB_ICONERROR);
@@ -219,6 +232,8 @@ void RecvRoom(char* recvBuffer)
         MessageBox(g_hWnd, _T("방이 꽉찼습니다.."), _T("실패"), MB_OK | MB_ICONERROR);
     else if (response->Result == (UINT16)ERROR_CODE::LOGIN_USER_NOT_FOUND)
         MessageBox(g_hWnd, _T("로그인을 먼저 해주세요.."), _T("실패"), MB_OK | MB_ICONERROR);
+
+    g_SelectedRoomIndex = -1;   // 방 입장 실패시 초기화
 }
 
 void RecvLeaveRoom(char* recvBuffer)
@@ -235,6 +250,7 @@ void RecvLeaveRoom(char* recvBuffer)
             ShowWindow(g_hButtonSignup, SW_SHOW);
             ShowWindow(g_hButtonLogin, SW_SHOW);
             ShowWindow(g_hButtonEnterRoom, SW_SHOW);
+            ShowWindow(g_hComboRoom, SW_SHOW);
 
             ShowWindow(g_hChatEdit, SW_HIDE);           // 채팅 입력창
             ShowWindow(g_hButtonLeaveRoom, SW_HIDE);    // 방 나가기
@@ -242,6 +258,8 @@ void RecvLeaveRoom(char* recvBuffer)
             ShowWindow(g_hUserList, SW_HIDE);
 
             InvalidateRect(g_hWnd, NULL, TRUE);
+
+            g_SelectedRoomIndex = -1;   // 방 나갈시 초기화
         }
     }
 }
@@ -255,6 +273,15 @@ void RecvLeave_Notify_Room(char* recvBuffer)
         {
             g_iUserCntInRoom = response->UserCntInRoom;
             memcpy(g_UserID, response->UserIDList, sizeof(response->UserIDList));
+
+
+            SendMessage(g_hUserList, LB_RESETCONTENT, 0, 0);
+            wchar_t wUserID[MAX_USER_COUNT][MAX_USER_ID_LEN + 1];
+            for (int i = 0; i < g_iUserCntInRoom; ++i)
+            {
+                MultiByteToWideChar(CP_ACP, 0, g_UserID[i], -1, wUserID[i], MAX_USER_ID_LEN + 1);
+                SendMessage(g_hUserList, LB_ADDSTRING, 0, (LPARAM)wUserID[i]);
+            }
         }
 
         InvalidateRect(g_hWnd, NULL, TRUE);
@@ -284,11 +311,13 @@ void RecvGameStart(char* recvBuffer)
     case (UINT16)ERROR_CODE::STONE_GAME_ALREADY_PLAYING:
         MessageBox(g_hWnd, _T("이미 게임이 진행중 입니다.."), _T("실패"), MB_NOFOCUS | MB_ICONERROR);
         break;
+    case (UINT16)ERROR_CODE::GAME_FOUND_USER_ME:
+        MessageBox(g_hWnd, _T("본인을 제외한 상대방을 선택하세요.."), _T("실패"), MB_NOFOCUS | MB_ICONERROR);
+        break; 
     default:
         break;
     } 
 }
-
 
 void RecvStone(char* recvBuffer)
 {
@@ -321,6 +350,9 @@ void RecvStone(char* recvBuffer)
         case ERROR_CODE::STONE_GAME_NOT_PLAYING:
             _tcscpy_s(szError, _T("게임이 아직 시작되지 않았습니다."));
             break;
+        case ERROR_CODE::STONE_GAME_OBSERVER:
+            _tcscpy_s(szError, _T("관전자는 돌을 둘 수 없습니다."));
+            break;
         default:
             _tcscpy_s(szError, _T("알 수 없는 오류입니다."));
             break;
@@ -342,18 +374,33 @@ void Recv_Notify_Stone(char* recvBuffer)
 
     if ((INT16)ERROR_CODE::GAME_WIN == response->Result)
     {
-        TCHAR szError[128]; 
+        TCHAR szError[128];
         _tcscpy_s(szError, _T("승리!"));
-        MessageBox(g_hWnd, szError, _T("게임 종료!"), MB_OK | MB_ICONERROR);
+        int result = MessageBox(g_hWnd, szError, _T("게임 종료!"), MB_OK | MB_ICONINFORMATION);
+        if (result == IDOK)
+        {
+            for (int i = 0; i < BOARD_SIZE; ++i)
+            {
+                memset(board[i], 0, sizeof(int) * BOARD_SIZE);
+            }
+            InvalidateRect(g_hWnd, NULL, TRUE); // 보드 다시 그림
+        }
     }
     else if ((INT16)ERROR_CODE::GAME_LOSE == response->Result)
     {
         TCHAR szError[128];
         _tcscpy_s(szError, _T("패배!"));
-        MessageBox(g_hWnd, szError, _T("게임 종료!"), MB_OK | MB_ICONERROR);
+        int result = MessageBox(g_hWnd, szError, _T("게임 종료!"), MB_OK | MB_ICONERROR);
+        if (result == IDOK)
+        {
+            for (int i = 0; i < BOARD_SIZE; ++i)
+            {
+                memset(board[i], 0, sizeof(int) * BOARD_SIZE);
+            }
+            InvalidateRect(g_hWnd, NULL, TRUE); // 보드 다시 그림
+        }
     }
 }
-
 
 void RecvThreadFunc()
 {
@@ -430,7 +477,6 @@ void RecvThreadFunc()
     }
 }
 
-
 void DrawBoard(HDC hdc)
 {
     for (int i = 0; i < BOARD_SIZE; i++) {
@@ -475,7 +521,7 @@ void HandleClick(int x, int y)
         packet.Type = 0;
         packet.row = row;
         packet.col = col;
-        packet.roomIndex = RoomIndex;
+        packet.roomIndex = g_SelectedRoomIndex;
         
         packet.PacketLength = sizeof(PUT_STONE_REQUEST_PACKET);
 
@@ -575,7 +621,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     return (int)msg.wParam;
 }
 
-
+// 관전자도 돌을 둘수잇는 버그 수정해야댐
+// 방에 나갓다 들어오면 채팅창 초기화 시켜야함
 
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -619,6 +666,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
             centerX - buttonWidth / 2, 480, buttonWidth, buttonHeight, hWnd, (HMENU)2, g_hInstance, NULL);
 
+        g_hComboRoom = CreateWindow(_T("COMBOBOX"), NULL,
+            CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_CHILD | WS_VISIBLE,
+            (centerX - buttonWidth / 2) + buttonWidth + 10  , 480, buttonWidth, 200, hWnd, (HMENU)200, g_hInstance, NULL);
+
+        // 콤보박스에 항목 추가
+        SendMessage(g_hComboRoom, CB_ADDSTRING, 0, (LPARAM)_T("방 0번"));
+        SendMessage(g_hComboRoom, CB_ADDSTRING, 0, (LPARAM)_T("방 1번"));
+        SendMessage(g_hComboRoom, CB_ADDSTRING, 0, (LPARAM)_T("방 2번"));
+        SendMessage(g_hComboRoom, CB_ADDSTRING, 0, (LPARAM)_T("방 3번"));
+        SendMessage(g_hComboRoom, CB_ADDSTRING, 0, (LPARAM)_T("방 4번"));
+        SendMessage(g_hComboRoom, CB_SETCURSEL, 0, 0);
+        
+
+
         g_hButtonLeaveRoom = CreateWindow(_T("BUTTON"), _T("방 나가기"),
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
             900, 340, 100, 25, hWnd, (HMENU)3, g_hInstance, NULL);
@@ -632,7 +693,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
         g_hUserList = CreateWindow(_T("LISTBOX"), NULL,
             WS_CHILD | WS_VISIBLE | LBS_NOTIFY | WS_BORDER | WS_VSCROLL,
-            620, 150, 200, 100, hWnd, (HMENU)5, g_hInstance, NULL);
+            620, 150, 150, 100, hWnd, (HMENU)5, g_hInstance, NULL);
         ShowWindow(g_hUserList, SW_HIDE);
 
        
@@ -741,9 +802,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 break;
             }
 
+            g_SelectedRoomIndex = SendMessage(g_hComboRoom, CB_GETCURSEL, 0, 0);
+            if (g_SelectedRoomIndex == CB_ERR)
+            {
+                MessageBox(hWnd, _T("방을 선택해주세요."), _T("오류"), MB_OK | MB_ICONERROR);
+                break;
+            }
+
+
             RoomPacket.PacketId = (UINT16)PACKET_ID::ROOM_ENTER_REQUEST;
             RoomPacket.Type = 0;
-            RoomPacket.RoomNumber = RoomIndex;
+            RoomPacket.RoomNumber = g_SelectedRoomIndex;
             RoomPacket.PacketLength = sizeof(ROOM_ENTER_REQUEST_PACKET);
 
             WSABUF wsaBuf;
@@ -774,7 +843,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         {
             RoomPacket.PacketId = (UINT16)PACKET_ID::ROOM_LEAVE_REQUEST;
             RoomPacket.Type = 0;
-            RoomPacket.RoomNumber = RoomIndex;
+            RoomPacket.RoomNumber = g_SelectedRoomIndex;
             RoomPacket.PacketLength = sizeof(ROOM_LEAVE_REQUEST_PACKET);
 
             WSABUF wsaBuf;
@@ -805,11 +874,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         {
             GamePacket.PacketId = (UINT16)PACKET_ID::START_GAME_REQUEST_PACKET;
             GamePacket.Type = 0;
-            GamePacket.roomIndex = RoomIndex;
+            GamePacket.roomIndex = g_SelectedRoomIndex;
             GamePacket.TurnIndex = currentPlayer;
             GamePacket.BoardSize = BOARD_SIZE;
             GamePacket.PacketLength = sizeof(START_GAME_REQUEST_PACKET);
-            strcpy_s(GamePacket.userId, g_SelectedID);
+            WideCharToMultiByte(CP_ACP, 0, g_SelectedID, -1, GamePacket.userId, sizeof(GamePacket.userId), NULL, NULL);
              
             WSABUF wsaBuf;
             wsaBuf.buf = (CHAR*)&GamePacket;
@@ -836,12 +905,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         break;
 
         case 5:
-        {
+        {            
             int index = (int)SendMessage(g_hUserList, LB_GETCURSEL, 0, 0);
             if (index != LB_ERR)
-            {                
+            {
                 SendMessage(g_hUserList, LB_GETTEXT, index, (LPARAM)g_SelectedID);
-                //MessageBox(hWnd, g_SelectedID, "선택된 사용자 ID", MB_OK);
+                //MessageBoxW(hWnd, wSelectedID, L"선택된 사용자 ID", MB_OK);
             }
         }
             break;
@@ -901,7 +970,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             int currentLine = 0;
 
             auto MakeRect = [&](int line) -> RECT {
-                return { 750, startY + line * lineHeight, 1100, startY + (line + 1) * lineHeight };
+                return { 850, startY + line * lineHeight, 1100, startY + (line + 1) * lineHeight };
             };
 
             RECT rt = MakeRect(currentLine++);

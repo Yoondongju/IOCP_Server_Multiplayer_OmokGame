@@ -537,13 +537,22 @@ void PacketManager::ProcessStartGame(UINT32 clientIndex_, UINT16 packetSize_, ch
 	INT32 UserIndex = mUserManager->FindUserIndexByID(pRequestpacket->userId);
 	if (-1 != UserIndex)
 	{
-		User* pCompanionUser = mUserManager->GetUserByConnIdx(UserIndex);
-		User* pMyUser = mUserManager->GetUserByConnIdx(clientIndex_);
+		if (true == mUserManager->FindMeIndexByID(pRequestpacket->userId, clientIndex_))
+		{
+			packet.Result = (INT16)ERROR_CODE::GAME_FOUND_USER_ME;
+		}
+		else
+		{			
+			packet.Result = (INT16)mGameMgr->CheckGamePlay(RoomIndex, TurnIndex, BoardSize, mRoomManager);
+			if ((INT16)ERROR_CODE::NONE == packet.Result)
+			{
+				User* pCompanionUser = mUserManager->GetUserByConnIdx(UserIndex);
+				User* pMyUser = mUserManager->GetUserByConnIdx(clientIndex_);
 
-		pCompanionUser->StartPlaying();
-		pMyUser->StartPlaying();
-
-		packet.Result = (INT16)mGameMgr->CheckGamePlay(RoomIndex, TurnIndex, BoardSize, mRoomManager);
+				pCompanionUser->StartPlaying();
+				pMyUser->StartPlaying();
+			}
+		}		
 	}
 	else
 		packet.Result = (INT16)ERROR_CODE::GAME_NOT_FOUND_USER;
@@ -570,12 +579,19 @@ void PacketManager::ProcessStoneLogic(UINT32 clientIndex_, UINT16 packetSize_, c
 	packet.row = row;
 	packet.col = col;	
 	packet.stoneColor = -1;
-	packet.Result = (INT16)mGameMgr->CheckPutStone(clientIndex_, row, col, roomIndex, mRoomManager);
 
+	if (false == mUserManager->GetUserByConnIdx(clientIndex_)->IsPlaying())
+	{
+		packet.Result = (INT16)ERROR_CODE::STONE_GAME_OBSERVER;
+	}
+	else
+		packet.Result = (INT16)mGameMgr->CheckPutStone(clientIndex_, row, col, roomIndex, mRoomManager);
+
+
+	bool isWin = false;
 	if ((INT16)ERROR_CODE::NONE == packet.Result)
 	{
 		packet.stoneColor = mGameMgr->Update_TurnIndex(row, col);
-
 
 		PUT_STONE_NOTIFY_PACKET Notifypacket;
 		Notifypacket.PacketId = (UINT16)PACKET_ID::PUT_STONE_NOTIFY_PACKET;
@@ -585,8 +601,10 @@ void PacketManager::ProcessStoneLogic(UINT32 clientIndex_, UINT16 packetSize_, c
 		Notifypacket.stoneColor = packet.stoneColor;
 		Notifypacket.Result = (INT16)ERROR_CODE::NONE;
 
-		bool isWin = mGameMgr->CheckWin(row, col, packet.stoneColor);
-		auto& Users = mRoomManager->GetRoomByNumber(roomIndex)->Get_Users();
+		isWin = mGameMgr->CheckWin(row, col, packet.stoneColor);
+
+		Room* pRoom = mRoomManager->GetRoomByNumber(roomIndex);
+		auto& Users = pRoom->Get_Users();
 		for (auto user : Users)
 		{
 			if(true == user->IsPlaying() && isWin)
@@ -595,13 +613,18 @@ void PacketManager::ProcessStoneLogic(UINT32 clientIndex_, UINT16 packetSize_, c
 					Notifypacket.Result = (INT16)ERROR_CODE::GAME_WIN;
 				else
 					Notifypacket.Result = (INT16)ERROR_CODE::GAME_LOSE;
+
+				mGameMgr->GameEnd();
+				user->EndPlay();
+				pRoom->End_GamePlay();
 			}
 
 			SendPacketFunc(user->GetNetConnIdx(), sizeof(PUT_STONE_NOTIFY_PACKET), (char*)&Notifypacket);
 		}
 	}
 
-	SendPacketFunc(clientIndex_, sizeof(PUT_STONE_RESPONSE_PACKET), (char*)&packet);	
+	if(false == isWin)
+		SendPacketFunc(clientIndex_, sizeof(PUT_STONE_RESPONSE_PACKET), (char*)&packet);	
 }
 
 bool PacketManager::ContainsHangul(const CHAR* str)
