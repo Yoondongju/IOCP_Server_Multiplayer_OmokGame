@@ -263,6 +263,16 @@ void PacketManager::ProcessRegister(UINT32 clientIndex_, UINT16 packetSize_, cha
 	}
 	else
 	{
+		char statQuery[256];
+		snprintf(statQuery, sizeof(statQuery),
+			"INSERT INTO user_stats (user_id, total_matches, wins, losses) VALUES ('%s', 0, 0, 0)",
+			pRegisterPacket->UserID);
+
+		if (mysql_query(sqlconn, statQuery) != 0)
+		{
+			std::cout << "전적 초기화 쿼리 실패: " << mysql_error(sqlconn) << "\n";
+		}
+
 		resPacket.Result = 0; // 성공
 	}
 
@@ -343,8 +353,19 @@ void PacketManager::ProcessLogin(UINT32 clientIndex_, UINT16 packetSize_, char* 
 		{
 			// 로그인 성공
 			loginResPacket.Result = (UINT16)ERROR_CODE::NONE;
-	
 			mUserManager->AddUser(pLoginReqPacket->UserID, clientIndex_);
+
+			User* pUser = mUserManager->GetUserByConnIdx(clientIndex_);
+			const USER_DATA& Data = pUser->Get_MyData();
+
+			if (false == LoadUserStat(pUser))
+			{
+				printf("유저 전적 불러오기 실패: %s\n", pUserID);
+			}
+			else
+				printf("유저 전적 불러오기 성공: %s (승:%d 패:%d 총:%d)\n",
+					pUserID, Data.iWin, Data.iLose, Data.iTotalMatch);
+
 		}
 		else
 		{
@@ -615,8 +636,10 @@ void PacketManager::ProcessStoneLogic(UINT32 clientIndex_, UINT16 packetSize_, c
 					Notifypacket.Result = (INT16)ERROR_CODE::GAME_LOSE;
 
 				mGameMgr->GameEnd();
-				user->EndPlay();
 				pRoom->End_GamePlay();
+				user->EndPlay();
+				
+				UpdateUserStat(user, Notifypacket.Result);
 			}
 
 			SendPacketFunc(user->GetNetConnIdx(), sizeof(PUT_STONE_NOTIFY_PACKET), (char*)&Notifypacket);
@@ -657,5 +680,117 @@ bool PacketManager::IsInvalidUserID(const CHAR* pUserID)
 	}
 
 	return false;
+}
+
+bool PacketManager::LoadUserStat(User* pUser)
+{
+	char query[512];
+	snprintf(query, sizeof(query),
+		"SELECT total_matches, wins, losses FROM user_stats WHERE user_id='%s' LIMIT 1;",
+		pUser->GetUserId().c_str());
+
+	MYSQL* const sqlconn = mDBMgr->Get_SqlConn();
+	int queryResult = mysql_query(sqlconn, query);
+	if (queryResult != 0)
+	{
+		printf("전적 쿼리 실패: %s\n", mysql_error(sqlconn));
+		return false;
+	}
+
+	MYSQL_RES* result = mysql_store_result(sqlconn);
+	if (!result)
+	{
+		printf("MySQL 결과 없음 또는 오류: %s\n", mysql_error(sqlconn));
+		return false;
+	}
+
+	MYSQL_ROW row = mysql_fetch_row(result);
+	if (row == nullptr)
+	{
+		// 신규 유저 전적 데이터가 없으면 초기값 유지
+		mysql_free_result(result);
+		return true;
+	}
+
+	UINT32 iTotal = atoi(row[0]);
+	UINT32 iWin = atoi(row[1]);
+	UINT32 iLose = atoi(row[2]);
+
+	USER_DATA Data{};
+	Data.iTotalMatch = iTotal;
+	Data.iWin = iWin;
+	Data.iLose = iLose;
+	pUser->LoadUserStat(Data);
+
+
+	mysql_free_result(result);
+	return true;
+}
+
+void PacketManager::UpdateUserStat(User* pUser, INT16 iResult)
+{
+	MYSQL* sqlconn = mDBMgr->Get_SqlConn();
+
+	// user_stats에 데이터가 있는지 체크
+	char query[512];
+	snprintf(query, sizeof(query),
+		"SELECT total_matches, wins, losses FROM user_stats WHERE user_id='%s' LIMIT 1;",
+		pUser->GetUserId().c_str());
+
+	int iQueryResult = mysql_query(sqlconn, query);
+	if (iQueryResult != 0)
+	{
+		printf("UpdateUserStat 쿼리 실패: %s\n", mysql_error(sqlconn));
+		return;
+	}
+
+	MYSQL_RES* result = mysql_store_result(sqlconn);
+	if (!result)
+	{
+		printf("UpdateUserStat 결과 없음 또는 오류: %s\n", mysql_error(sqlconn));
+		return;
+	}
+
+	MYSQL_ROW row = mysql_fetch_row(result);
+	if (row == nullptr)
+	{
+		// 데이터 없으면 INSERT
+		mysql_free_result(result);
+
+		snprintf(query, sizeof(query),
+			"INSERT INTO user_stats (user_id, total_matches, wins, losses) VALUES ('%s', 1, %d, %d);",
+			pUser->GetUserId().c_str(),
+			((INT16)ERROR_CODE::GAME_WIN  == iResult) ? 1 : 0,
+			((INT16)ERROR_CODE::GAME_LOSE == iResult) ? 1 : 0);
+
+		if (iQueryResult != 0)
+		{
+			printf("UpdateUserStat INSERT 실패: %s\n", mysql_error(sqlconn));
+		}
+	}
+	else
+	{
+		// 데이터 있으면 UPDATE
+		int total = atoi(row[0]);
+		int wins = atoi(row[1]);
+		int losses = atoi(row[2]);
+
+		mysql_free_result(result);
+
+		total++;
+		if ((INT16)ERROR_CODE::GAME_WIN == iResult)
+			wins++;
+		else 
+			losses++;
+
+		snprintf(query, sizeof(query),
+			"UPDATE user_stats SET total_matches=%d, wins=%d, losses=%d, updated_at=NOW() WHERE user_id='%s';",
+			total, wins, losses, pUser->GetUserId().c_str());
+
+		if (iQueryResult != 0)
+		{
+			printf("UpdateUserStat UPDATE 실패: %s\n", mysql_error(sqlconn));
+		}
+	}
 }
 

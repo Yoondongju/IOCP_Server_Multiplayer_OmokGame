@@ -15,6 +15,7 @@ class RoomManager;
 class RedisManager;
 class MyDBManager;
 class GameManager;
+class User;
 
 
 class PacketManager {
@@ -72,6 +73,10 @@ private:
 
 	bool ContainsHangul(const CHAR* str);
 	bool IsInvalidUserID(const CHAR* pUserID);
+
+
+	bool LoadUserStat(User* pUser);
+	void UpdateUserStat(User* pUser, INT16 iResult);
 
 
 	typedef void(PacketManager::* PROCESS_RECV_PACKET_FUNCTION)(UINT32, UINT16, char*);

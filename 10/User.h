@@ -3,6 +3,13 @@
 
 #include "Packet.h"
 
+struct USER_DATA
+{
+	UINT32 iTotalMatch;
+	UINT32 iWin;
+	UINT32 iLose;
+};
+
 class User
 {
 	const UINT32 PACKET_DATA_BUFFER_SIZE = 8096;
@@ -56,6 +63,17 @@ public:
 	void StartPlaying() { mIsPlaying = true; }
 	void EndPlay() { mIsPlaying = false; }
 	bool IsPlaying() { return mIsPlaying; }
+
+
+
+	const USER_DATA& Get_MyData() { return mData; }
+
+	void LoadUserStat(const USER_DATA& Data)
+	{
+		mData.iTotalMatch = Data.iTotalMatch;
+		mData.iWin = Data.iWin;
+		mData.iLose = Data.iLose;
+	}
 
 
 	INT32 GetCurrentRoom() 
@@ -134,6 +152,9 @@ public:
 
 
 private:
+	USER_DATA	mData;
+
+
 	INT32 mIndex = -1;
 
 	INT32 mRoomIndex = -1;
