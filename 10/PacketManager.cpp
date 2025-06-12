@@ -794,40 +794,40 @@ void PacketManager::UpdateUserStat(User* pUser, INT16 iResult)
 	}
 
 	MYSQL_ROW row = mysql_fetch_row(result);
-	if (row == nullptr)
-	{
-		// 데이터 없으면 INSERT
-		mysql_free_result(result);
-
-		snprintf(query, sizeof(query),
-			"INSERT INTO user_stats (user_id, total_matches, wins, losses) VALUES ('%s', 1, %d, %d);",
-			pUser->GetUserId().c_str(),
-			((INT16)ERROR_CODE::GAME_WIN  == iResult) ? 1 : 0,
-			((INT16)ERROR_CODE::GAME_LOSE == iResult) ? 1 : 0);
-
-		if (iQueryResult != 0)
-		{
-			printf("UpdateUserStat INSERT 실패: %s\n", mysql_error(sqlconn));
-		}
-	}
-	else
+	//if (row == nullptr)	이미 회원가입할때 db테이블 만들어주잔항
+	//{
+	//	// 데이터 없으면 INSERT
+	//	mysql_free_result(result);
+	//
+	//	snprintf(query, sizeof(query),
+	//		"INSERT INTO user_stats (user_id, total_matches, wins, losses) VALUES ('%s', 1, %d, %d);",
+	//		pUser->GetUserId().c_str(),
+	//		((INT16)ERROR_CODE::GAME_WIN  == iResult) ? 1 : 0,
+	//		((INT16)ERROR_CODE::GAME_LOSE == iResult) ? 1 : 0);
+	//
+	//	if (iQueryResult != 0)
+	//	{
+	//		printf("UpdateUserStat INSERT 실패: %s\n", mysql_error(sqlconn));
+	//	}
+	//}
+	//else
 	{
 		// 데이터 있으면 UPDATE
-		int total = atoi(row[0]);
-		int wins = atoi(row[1]);
-		int losses = atoi(row[2]);
+		UINT32 iTotal = atoi(row[0]);
+		UINT32 iWins = atoi(row[1]);
+		UINT32 iLosses = atoi(row[2]);
 
 		mysql_free_result(result);
 
-		total++;
+		iTotal++;
 		if ((INT16)ERROR_CODE::GAME_WIN == iResult)
-			wins++;
+			iWins++;
 		else 
-			losses++;
+			iLosses++;
 
 		snprintf(query, sizeof(query),
 			"UPDATE user_stats SET total_matches=%d, wins=%d, losses=%d, updated_at=NOW() WHERE user_id='%s';",
-			total, wins, losses, pUser->GetUserId().c_str());
+			iTotal, iWins, iLosses, pUser->GetUserId().c_str());
 
 		if (mysql_query(sqlconn, query) != 0)
 		{
@@ -835,6 +835,12 @@ void PacketManager::UpdateUserStat(User* pUser, INT16 iResult)
 		}
 		else
 		{
+			USER_DATA Data{};
+			Data.iTotalMatch = iTotal;
+			Data.iWin = iWins;
+			Data.iLose = iLosses;
+			pUser->LoadUserStat(Data);
+
 			printf("[DEBUG] user_id: [%s]\n", pUser->GetUserId().c_str());
 			printf("[DEBUG] UPDATE 쿼리: %s\n", query);
 		}
