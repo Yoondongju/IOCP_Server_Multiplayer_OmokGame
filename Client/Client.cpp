@@ -43,7 +43,7 @@ struct USER_DATA
 };
 
 USER_DATA g_MyData{};
-
+USER_DATA g_SelectUserData{};
 
 std::string GetTextFromEdit(HWND hEdit)
 {
@@ -65,7 +65,15 @@ std::string GetTextFromEdit(HWND hEdit)
 #define BOARD_SIZE 15
 #define CELL_SIZE 40
 
+
+WNDPROC g_OldEditProc = nullptr;
+
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
+LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+LRESULT CALLBACK UserInfoPanelProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+
+
 void DrawBoard(HDC hdc);
 void DrawStones(HDC hdc);
 void HandleClick(int x, int y);
@@ -83,12 +91,11 @@ HWND g_hComboRoom;
 
 HINSTANCE g_hInstance;
 HWND g_hWnd;
+HWND g_hUserInfoPanel;
 
 HWND g_hEditID;
 HWND g_hEditPW;
 HWND g_hChatEdit = nullptr;
-WNDPROC g_OldEditProc = nullptr;
-LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 
 INT32 g_iRoomNum = 0;
@@ -111,6 +118,9 @@ const int CHAT_START_Y = 380;
 
 std::string g_strMyID;
 std::string g_strMyPW;
+
+
+
 
 
 LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -157,6 +167,69 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
     }
 
     return CallWindowProc(g_OldEditProc, hWnd, msg, wParam, lParam);
+}
+
+LRESULT UserInfoPanelProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    switch (msg)
+    {
+    case WM_PAINT:
+    {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hWnd, &ps);
+
+        RECT rcClient;
+        GetClientRect(hWnd, &rcClient);
+
+        // 배경 흰색
+        HBRUSH hBackground = CreateSolidBrush(RGB(255, 255, 255));
+        FillRect(hdc, &rcClient, hBackground);
+        DeleteObject(hBackground);
+
+        // 폰트: 맑은 고딕, 18pt
+        HFONT hFont = CreateFontW(
+            20, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+            HANGEUL_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS,
+            L"맑은 고딕");
+
+        HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
+        SetBkMode(hdc, TRANSPARENT);
+        SetTextColor(hdc, RGB(150, 40, 170));
+
+        // 출력할 위치
+        int x = 15;
+        int y = 15;
+        int lineHeight = 30;
+
+        WCHAR szBuffer[256];
+        wsprintf(szBuffer, L"아이디: %s", g_SelectedID);
+        TextOutW(hdc, x, y, szBuffer, lstrlenW(szBuffer));
+        y += lineHeight;
+
+        wsprintf(szBuffer, L"승: %d", g_SelectUserData.iWin);
+        TextOutW(hdc, x, y, szBuffer, lstrlenW(szBuffer));
+        y += lineHeight;
+
+        wsprintf(szBuffer, L"패: %d", g_SelectUserData.iLose);
+        TextOutW(hdc, x, y, szBuffer, lstrlenW(szBuffer));
+        y += lineHeight;
+
+        wsprintf(szBuffer, L"총 경기: %d판", g_SelectUserData.iTotalMatch);
+        TextOutW(hdc, x, y, szBuffer, lstrlenW(szBuffer));
+
+        SelectObject(hdc, hOldFont);
+        DeleteObject(hFont);
+        EndPaint(hWnd, &ps);
+    }
+    return 0;
+
+    case WM_ERASEBKGND:
+        return 1; // flicker 방지용
+
+    default:
+        return DefWindowProc(hWnd, msg, wParam, lParam);
+    }
 }
 
 
@@ -427,6 +500,7 @@ void RecvLeaveRoom(char* recvBuffer)
             ShowWindow(g_hButtonLeaveRoom, SW_HIDE);    // 방 나가기
             ShowWindow(g_hButtonGameStart, SW_HIDE);
             ShowWindow(g_hUserList, SW_HIDE);
+            ShowWindow(g_hUserInfoPanel, SW_HIDE);
 
             InvalidateRect(g_hWnd, NULL, TRUE);
 
@@ -586,13 +660,15 @@ void Recv_OtherUserData(char* recvBuffer)
 {
     USER_DATA_PACKET* packet = reinterpret_cast<USER_DATA_PACKET*>(recvBuffer);
 
-    g_MyData.iTotalMatch = packet->iTotalMatch;
-    g_MyData.iWin = packet->iWinCount;
-    g_MyData.iLose = packet->iLoseCount;
+    g_SelectUserData.iTotalMatch = packet->iTotalMatch;
+    g_SelectUserData.iWin = packet->iWinCount;
+    g_SelectUserData.iLose = packet->iLoseCount;
 
-    // 다른 유저의 데이터도 갱신해줘야지..
+    ShowWindow(g_hUserInfoPanel, SW_SHOW);
+    SetWindowPos(g_hUserInfoPanel, NULL, 970, 190, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
 
-
+    InvalidateRect(g_hUserInfoPanel, NULL, TRUE);
+    UpdateWindow(g_hUserInfoPanel);
 }
 
 void RecvThreadFunc()
@@ -647,11 +723,11 @@ void RecvThreadFunc()
                 PACKET_HEADER* header = reinterpret_cast<PACKET_HEADER*>(recvBuffer.data());
 
                // // 헤더에 패킷 전체 크기 필드가 있다고 가정 (예: header->PacketSize)
-                 int packetSize = header->PacketLength; // 패킷 전체 크기(헤더+데이터)
-               //
-               // // 패킷 전체가 버퍼에 다 도착했는지 확인
-               // if (recvBuffer.size() < packetSize)
-               //     break;  // 아직 다 안 왔으니 더 받아야 함
+                UINT16 packetSize = header->PacketLength; // 패킷 전체 크기(헤더+데이터)
+               
+                // 패킷 전체가 버퍼에 다 도착했는지 확인
+                if (recvBuffer.size() < packetSize)
+                    break;  // 아직 다 안 왔으니 더 받아야 함
 
                 // 완성된 패킷 데이터 포인터
                 char* packetData = recvBuffer.data();
@@ -779,6 +855,9 @@ void HandleClick(int x, int y)
 }
 
 
+
+
+
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     LPSTR lpCmdLine, int nCmdShow)
 {
@@ -814,20 +893,31 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     }
 
 
-
     WNDCLASS wc = { 0 };
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance;
     wc.lpszClassName = _T("GomokuWindowClass");
     wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-
     RegisterClass(&wc);
+
+
+
+
+    WNDCLASSW wcUserInfo = { 0 };
+    wcUserInfo.lpfnWndProc = UserInfoPanelProc;  
+    wcUserInfo.hInstance = g_hInstance;
+    wcUserInfo.lpszClassName = L"UserInfoPanel";
+    wcUserInfo.hbrBackground = (HBRUSH)GetStockObject(NULL_BRUSH); // 배경 없음
+    RegisterClassW(&wcUserInfo);
+
+
+
 
     HWND hWnd = CreateWindow(
         wc.lpszClassName, _T("오목 게임 - Win32 GUI"),
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT,
-        1200,760,
+        1360,760,
         NULL, NULL, hInstance, NULL);
 
     g_hWnd = hWnd;
@@ -922,10 +1012,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
         g_hUserList = CreateWindow(_T("LISTBOX"), NULL,
             WS_CHILD | WS_VISIBLE | LBS_NOTIFY | WS_BORDER | WS_VSCROLL,
-            900, 200, 150, 100, hWnd, (HMENU)5, g_hInstance, NULL);
+            800, 190, 150, 100, hWnd, (HMENU)5, g_hInstance, NULL);
         ShowWindow(g_hUserList, SW_HIDE);
 
-       
+
+
+        g_hUserInfoPanel = CreateWindowW(L"UserInfoPanel", NULL,
+            WS_CHILD | WS_VISIBLE | WS_BORDER,
+            0, 0, 300, 140, hWnd, NULL, g_hInstance, NULL);
+        ShowWindow(g_hUserInfoPanel, SW_HIDE);
+
+
+
+
+
 
         // 폰트 적용
         SendMessage(g_hEditID, WM_SETFONT, (WPARAM)hFont, TRUE);
@@ -1134,12 +1234,40 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         break;
 
         case 5:
-        {            
+        {
             int index = (int)SendMessage(g_hUserList, LB_GETCURSEL, 0, 0);
+            SendMessage(g_hUserList, LB_GETTEXT, index, (LPARAM)g_SelectedID);
+
             if (index != LB_ERR)
             {
-                SendMessage(g_hUserList, LB_GETTEXT, index, (LPARAM)g_SelectedID);
-                //MessageBoxW(hWnd, wSelectedID, L"선택된 사용자 ID", MB_OK);
+                USER_DATA_REQUEST_PACKET packet{};
+
+                packet.PacketId = (UINT16)PACKET_ID::OTHER_USER_DATA_REQUEST;
+                packet.PacketLength = sizeof(USER_DATA_REQUEST_PACKET);
+                packet.Type = 0;
+                WideCharToMultiByte(CP_ACP, 0, g_SelectedID, -1, packet.userId, sizeof(packet.userId), NULL, NULL);
+                
+                WSABUF wsaBuf;
+                wsaBuf.buf = (CHAR*)&packet;
+                wsaBuf.len = packet.PacketLength;
+
+                OVERLAPPED overlapped{};
+                DWORD bytesSent = 0;
+                DWORD flags = 0;
+
+                int sendResult = WSASend(clientSocket, &wsaBuf, 1, &bytesSent, flags, &overlapped, NULL);
+                if (sendResult == SOCKET_ERROR)
+                {
+                    int err = WSAGetLastError();
+                    if (err == WSA_IO_PENDING)
+                    {
+
+                    }
+                    else
+                    {
+                        MessageBox(hWnd, _T("유저 정보 요청 실패"), _T("오류"), MB_OK | MB_ICONERROR);
+                    }
+                }
             }
         }
             break;
@@ -1176,6 +1304,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         if (isInRoom)
         {
             HandleClick(LOWORD(lParam), HIWORD(lParam));
+
+            POINT ptMouse{};
+            GetCursorPos(&ptMouse);
+
+            RECT rcListBox{}, rcInfoPanel{};
+            GetWindowRect(g_hUserList, &rcListBox);
+            GetWindowRect(g_hUserInfoPanel, &rcInfoPanel);
+            if (!PtInRect(&rcListBox, ptMouse) && !PtInRect(&rcInfoPanel, ptMouse))
+            {
+                ShowWindow(g_hUserInfoPanel, SW_HIDE);
+                SendMessage(g_hUserList, LB_SETCURSEL, (WPARAM)LB_ERR, 0);
+            }
+
             InvalidateRect(hWnd, NULL, TRUE);
         }
     } 

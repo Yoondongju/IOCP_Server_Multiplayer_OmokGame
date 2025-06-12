@@ -30,7 +30,8 @@ void PacketManager::Init(const UINT32 maxClient_)
 				
 
 	mRecvFuntionDictionary[(int)PACKET_ID::MY_DATA_REQUEST] = &PacketManager::ProcessUserData;
-
+	mRecvFuntionDictionary[(int)PACKET_ID::OTHER_USER_DATA_REQUEST] = &PacketManager::ProcessOtherUserData;
+	
 
 	mRecvFuntionDictionary[(int)PACKET_ID::START_GAME_REQUEST_PACKET] = &PacketManager::ProcessStartGame;
 	mRecvFuntionDictionary[(int)PACKET_ID::PUT_STONE_REQUEST_PACKET] = &PacketManager::ProcessStoneLogic;
@@ -223,11 +224,10 @@ void PacketManager::ProcessRegister(UINT32 clientIndex_, UINT16 packetSize_, cha
 {
 	REGISTER_REQUEST_PACKET* pRegisterPacket = (REGISTER_REQUEST_PACKET*)pPacket_;
 	REGISTER_RESPONSE_PACKET resPacket{};
+	resPacket.PacketLength = sizeof(REGISTER_RESPONSE_PACKET);
 
 	if (IsInvalidUserID(pRegisterPacket->UserID))
-	{
-		// 문제가 있는 ID였더라면
-		resPacket.PacketLength = sizeof(REGISTER_RESPONSE_PACKET);
+	{		
 		resPacket.PacketId = (UINT16)PACKET_ID::REGISTER_RESPONSE;
 		resPacket.Result = (UINT16)ERROR_CODE::USER_MGR_INVALID_USER_UNIQUEID;
 		SendPacketFunc(clientIndex_, sizeof(REGISTER_RESPONSE_PACKET), (char*)&resPacket);
@@ -546,6 +546,29 @@ void PacketManager::ProcessUserData(UINT32 clientIndex_, UINT16 packetSize_, cha
 	SendPacketFunc(clientIndex_, sizeof(USER_DATA_PACKET), (char*)&UserDataPacket);
 }
 
+void PacketManager::ProcessOtherUserData(UINT32 clientIndex_, UINT16 packetSize_, char* pPacket_)
+{
+	UNREFERENCED_PARAMETER(packetSize_);
+	UNREFERENCED_PARAMETER(pPacket_);
+
+	auto pRequestpacket = reinterpret_cast<USER_DATA_REQUEST_PACKET*>(pPacket_);
+
+	INT32 ClinetIndex = mUserManager->FindUserIndexByID(pRequestpacket->userId);
+	User* pUser = mUserManager->GetUserByConnIdx(ClinetIndex);
+	
+
+	USER_DATA_PACKET UserDataPacket;
+	UserDataPacket.PacketId = (UINT16)PACKET_ID::OTHER_USER_DATA_RESPONSE;
+	UserDataPacket.PacketLength = sizeof(USER_DATA_PACKET);
+
+	const USER_DATA& Data = pUser->Get_MyData();
+	UserDataPacket.iTotalMatch = Data.iTotalMatch;
+	UserDataPacket.iWinCount = Data.iWin;
+	UserDataPacket.iLoseCount = Data.iLose;
+
+	SendPacketFunc(clientIndex_, sizeof(USER_DATA_PACKET), (char*)&UserDataPacket);
+}
+
 void PacketManager::ProcessStartGame(UINT32 clientIndex_, UINT16 packetSize_, char* pPacket_)
 {
 	UNREFERENCED_PARAMETER(packetSize_);
@@ -636,12 +659,12 @@ void PacketManager::ProcessStoneLogic(UINT32 clientIndex_, UINT16 packetSize_, c
 		auto& Users = pRoom->Get_Users();
 
 		USER_DATA_PACKET UserStatPacket{};	// 유저의 전적 데이터를 보내주는 패킷
-		UserStatPacket.PacketId = (UINT16)PACKET_ID::OTHER_USER_DATA_RESPONSE;
+		UserStatPacket.PacketId = (UINT16)PACKET_ID::MY_DATA_RESPONSE;
 		UserStatPacket.PacketLength = sizeof(USER_DATA_PACKET);
 
 		for (auto user : Users)
 		{
-			if(true == user->IsPlaying() && isWin)
+			if(true == user->IsPlaying() && isWin)	// 이번턴에 돌을 둔 유저가 보낸 패킷에 의하여 나와 게임중인 유저한테도 영향을준다.
 			{
 				if (user->GetNetConnIdx() == clientIndex_)
 					Notifypacket.Result = (INT16)ERROR_CODE::GAME_WIN;
@@ -653,16 +676,13 @@ void PacketManager::ProcessStoneLogic(UINT32 clientIndex_, UINT16 packetSize_, c
 				user->EndPlay();
 				
 				UpdateUserStat(user, Notifypacket.Result);
-
-				// 현재 방에 잇는 모든 유저에게 게임을 치룬 유저의 전적을 갱신해준 패킷을 보낸다				
+				
 				USER_DATA Userdata = user->Get_MyData();
 				UserStatPacket.iTotalMatch = Userdata.iTotalMatch;
 				UserStatPacket.iWinCount = Userdata.iWin;
 				UserStatPacket.iLoseCount = Userdata.iLose;
+				SendPacketFunc(user->GetNetConnIdx(), sizeof(USER_DATA_PACKET), (char*)&UserStatPacket); // 나와 상대방 한테만 패킷보냄
 			}
-
-			if(true == isWin)
-				SendPacketFunc(user->GetNetConnIdx(), sizeof(USER_DATA_PACKET), (char*)&UserStatPacket);
 
 			SendPacketFunc(user->GetNetConnIdx(), sizeof(PUT_STONE_NOTIFY_PACKET), (char*)&Notifypacket);
 		}

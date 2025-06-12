@@ -78,7 +78,8 @@ enum class  PACKET_ID : UINT16   // 전송 크기를 줄일 수 있고, 구조체 정렬도 최적
 
 	MY_DATA_REQUEST = 224,
 	MY_DATA_RESPONSE = 225,
-	OTHER_USER_DATA_RESPONSE = 226,
+	OTHER_USER_DATA_REQUEST = 226,
+	OTHER_USER_DATA_RESPONSE = 227,
 
 	START_GAME_REQUEST_PACKET = 248,
 	START_GAME_RESPONSE_PACKET = 249,
@@ -191,8 +192,15 @@ struct USER_DATA_PACKET : public PACKET_HEADER
 	INT32 iTotalMatch;
 	INT32 iWinCount;
 	INT32 iLoseCount;
-
 };
+
+struct USER_DATA_REQUEST_PACKET : public PACKET_HEADER	// userID를통해 그 id의 유저 데이터정보를 요청한다
+{
+	char userId[64];
+};
+
+
+
 
 struct START_GAME_REQUEST_PACKET : public PACKET_HEADER
 {
