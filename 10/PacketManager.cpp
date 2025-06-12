@@ -29,7 +29,7 @@ void PacketManager::Init(const UINT32 maxClient_)
 	mRecvFuntionDictionary[(int)PACKET_ID::ROOM_CHAT_REQUEST] = &PacketManager::ProcessRoomChatMessage;
 				
 
-	mRecvFuntionDictionary[(int)PACKET_ID::USER_DATA_REQUEST] = &PacketManager::ProcessUserData;
+	mRecvFuntionDictionary[(int)PACKET_ID::MY_DATA_REQUEST] = &PacketManager::ProcessUserData;
 
 
 	mRecvFuntionDictionary[(int)PACKET_ID::START_GAME_REQUEST_PACKET] = &PacketManager::ProcessStartGame;
@@ -227,6 +227,7 @@ void PacketManager::ProcessRegister(UINT32 clientIndex_, UINT16 packetSize_, cha
 	if (IsInvalidUserID(pRegisterPacket->UserID))
 	{
 		// 문제가 있는 ID였더라면
+		resPacket.PacketLength = sizeof(REGISTER_RESPONSE_PACKET);
 		resPacket.PacketId = (UINT16)PACKET_ID::REGISTER_RESPONSE;
 		resPacket.Result = (UINT16)ERROR_CODE::USER_MGR_INVALID_USER_UNIQUEID;
 		SendPacketFunc(clientIndex_, sizeof(REGISTER_RESPONSE_PACKET), (char*)&resPacket);
@@ -363,9 +364,18 @@ void PacketManager::ProcessLogin(UINT32 clientIndex_, UINT16 packetSize_, char* 
 				printf("유저 전적 불러오기 실패: %s\n", pUserID);
 			}
 			else
+			{
 				printf("유저 전적 불러오기 성공: %s (승:%d 패:%d 총:%d)\n",
 					pUserID, Data.iWin, Data.iLose, Data.iTotalMatch);
 
+				USER_DATA_PACKET UserDataPacket;
+				UserDataPacket.PacketId = (UINT16)PACKET_ID::MY_DATA_RESPONSE;
+				UserDataPacket.PacketLength = sizeof(USER_DATA_PACKET);
+				UserDataPacket.iTotalMatch = Data.iTotalMatch;
+				UserDataPacket.iWinCount = Data.iWin;
+				UserDataPacket.iLoseCount = Data.iLose;
+				SendPacketFunc(clientIndex_, sizeof(USER_DATA_PACKET), (char*)&UserDataPacket);
+			}
 		}
 		else
 		{
@@ -515,11 +525,8 @@ void PacketManager::ProcessUserData(UINT32 clientIndex_, UINT16 packetSize_, cha
 	UNREFERENCED_PARAMETER(packetSize_);
 	UNREFERENCED_PARAMETER(pPacket_);
 
-	auto pRoomChatReqPacketet = reinterpret_cast<USER_DATA_PACKET*>(pPacket_);
-
-
 	USER_DATA_PACKET UserDataPacket;
-	UserDataPacket.PacketId = (UINT16)PACKET_ID::USER_DATA_RESPONSE;
+	UserDataPacket.PacketId = (UINT16)PACKET_ID::MY_DATA_RESPONSE;
 	UserDataPacket.PacketLength = sizeof(USER_DATA_PACKET);
 
 	auto pReqUser = mUserManager->GetUserByConnIdx(clientIndex_);
@@ -529,11 +536,12 @@ void PacketManager::ProcessUserData(UINT32 clientIndex_, UINT16 packetSize_, cha
 	}
 
 
-	strncpy(UserDataPacket.userId, pReqUser->GetUserId().c_str(), sizeof(UserDataPacket.userId));
-	UserDataPacket.userId[sizeof(UserDataPacket.userId) - 1] = '\0';	// 널 종료 보장
-	UserDataPacket.userIndex = pReqUser->GetNetConnIdx();
-	UserDataPacket.domainState = (UINT32)pReqUser->GetDomainState();
-	UserDataPacket.roomIndex = pReqUser->GetCurrentRoom();				// -1가면 방없음임
+	User* pUser = mUserManager->GetUserByConnIdx(clientIndex_);
+	const USER_DATA& Data = pUser->Get_MyData();
+	UserDataPacket.iTotalMatch = Data.iTotalMatch;
+	UserDataPacket.iWinCount= Data.iWin;
+	UserDataPacket.iLoseCount = Data.iLose;
+
 
 	SendPacketFunc(clientIndex_, sizeof(USER_DATA_PACKET), (char*)&UserDataPacket);
 }
@@ -626,6 +634,11 @@ void PacketManager::ProcessStoneLogic(UINT32 clientIndex_, UINT16 packetSize_, c
 
 		Room* pRoom = mRoomManager->GetRoomByNumber(roomIndex);
 		auto& Users = pRoom->Get_Users();
+
+		USER_DATA_PACKET UserStatPacket{};	// 유저의 전적 데이터를 보내주는 패킷
+		UserStatPacket.PacketId = (UINT16)PACKET_ID::OTHER_USER_DATA_RESPONSE;
+		UserStatPacket.PacketLength = sizeof(USER_DATA_PACKET);
+
 		for (auto user : Users)
 		{
 			if(true == user->IsPlaying() && isWin)
@@ -640,7 +653,16 @@ void PacketManager::ProcessStoneLogic(UINT32 clientIndex_, UINT16 packetSize_, c
 				user->EndPlay();
 				
 				UpdateUserStat(user, Notifypacket.Result);
+
+				// 현재 방에 잇는 모든 유저에게 게임을 치룬 유저의 전적을 갱신해준 패킷을 보낸다				
+				USER_DATA Userdata = user->Get_MyData();
+				UserStatPacket.iTotalMatch = Userdata.iTotalMatch;
+				UserStatPacket.iWinCount = Userdata.iWin;
+				UserStatPacket.iLoseCount = Userdata.iLose;
 			}
+
+			if(true == isWin)
+				SendPacketFunc(user->GetNetConnIdx(), sizeof(USER_DATA_PACKET), (char*)&UserStatPacket);
 
 			SendPacketFunc(user->GetNetConnIdx(), sizeof(PUT_STONE_NOTIFY_PACKET), (char*)&Notifypacket);
 		}
@@ -787,9 +809,14 @@ void PacketManager::UpdateUserStat(User* pUser, INT16 iResult)
 			"UPDATE user_stats SET total_matches=%d, wins=%d, losses=%d, updated_at=NOW() WHERE user_id='%s';",
 			total, wins, losses, pUser->GetUserId().c_str());
 
-		if (iQueryResult != 0)
+		if (mysql_query(sqlconn, query) != 0)
 		{
 			printf("UpdateUserStat UPDATE 실패: %s\n", mysql_error(sqlconn));
+		}
+		else
+		{
+			printf("[DEBUG] user_id: [%s]\n", pUser->GetUserId().c_str());
+			printf("[DEBUG] UPDATE 쿼리: %s\n", query);
 		}
 	}
 }

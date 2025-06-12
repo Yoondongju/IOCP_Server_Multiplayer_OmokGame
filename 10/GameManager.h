@@ -53,11 +53,11 @@ public:
 
         for (int i = 0; i < mBoardSize; ++i)
         {
-            memset(mBoard[i], 0, sizeof(int) * mBoardSize); 
+            memset(mBoard[i], 0, sizeof(INT16) * mBoardSize); 
         }
 
         //mBoardSize = 0;   // 이건 안해줘도된다.
-        mTurnIndex = 0;
+        //mTurnIndex = 0;
     }
  
 

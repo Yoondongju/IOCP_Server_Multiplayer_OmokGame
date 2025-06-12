@@ -76,9 +76,9 @@ enum class  PACKET_ID : UINT16   // 전송 크기를 줄일 수 있고, 구조체 정렬도 최적
 	ROOM_CHAT_RESPONSE = 222,
 	ROOM_CHAT_NOTIFY = 223,
 
-	USER_DATA_REQUEST = 224,
-	USER_DATA_RESPONSE = 225,
-
+	MY_DATA_REQUEST = 224,
+	MY_DATA_RESPONSE = 225,
+	OTHER_USER_DATA_RESPONSE = 226,
 
 	START_GAME_REQUEST_PACKET = 248,
 	START_GAME_RESPONSE_PACKET = 249,
@@ -187,10 +187,11 @@ struct ROOM_CHAT_NOTIFY_PACKET : public PACKET_HEADER
 // 유저 정보 패킷
 struct USER_DATA_PACKET : public PACKET_HEADER
 {
-	UINT32 userIndex;
-	char userId[64];       
-	INT32 roomIndex;
-	UINT32 domainState;      // DOMAIN_STATE enum값 (예: 0=NONE,1=LOGIN,2=ROOM)
+	// 전적에 대한 데이터
+	INT32 iTotalMatch;
+	INT32 iWinCount;
+	INT32 iLoseCount;
+
 };
 
 struct START_GAME_REQUEST_PACKET : public PACKET_HEADER

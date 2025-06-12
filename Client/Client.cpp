@@ -35,6 +35,16 @@ static START_GAME_REQUEST_PACKET GamePacket{};
 
 
 
+struct USER_DATA
+{
+    UINT32 iTotalMatch;
+    UINT32 iWin;
+    UINT32 iLose;
+};
+
+USER_DATA g_MyData{};
+
+
 std::string GetTextFromEdit(HWND hEdit)
 {
     TCHAR szBuffer[256];
@@ -150,7 +160,168 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
 }
 
 
+void DrawUI(HDC hdc)
+{
+    SetBkMode(hdc, TRANSPARENT);
 
+    if (false == isInRoom)
+    {
+        int windowWidth = 1200;
+        int editWidth = 300;
+        int centerX = windowWidth / 2;
+
+        int labelX = centerX - editWidth / 2 - 130; // 에디트창보다 100 왼쪽
+        int labelWidth = 100;
+        int editID_Y = 200;
+        int editPW_Y = 260;
+
+        TextOut(hdc, labelX, editID_Y + 10, _T("아이디 입력:"), lstrlen(_T("아이디 입력:")));
+        TextOut(hdc, labelX, editPW_Y + 10, _T("비밀번호 입력:"), lstrlen(_T("비밀번호 입력:")));
+    }
+    else
+    {
+        // 폰트 설정
+        HFONT hFontTitle = CreateFont(24, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+            DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, _T("Segoe UI"));
+
+        HFONT hFontContent = CreateFont(18, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+            DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, _T("Segoe UI"));
+
+        HFONT hOldFont = (HFONT)SelectObject(hdc, hFontTitle);
+
+        // 영역 기준 설정
+        const int leftColX = 650;
+        const int rightColX = 950;
+        const int colGapY = 30;
+        const int rowHeight = 28;
+        int y = 50;
+
+        // ===== [1] 내 아이디 / 전적 =====
+        SetTextColor(hdc, RGB(0, 120, 215)); // 파란색
+        DrawTextA(hdc, "내 아이디", -1, new RECT{ leftColX, y, leftColX + 200, y + rowHeight }, DT_LEFT | DT_SINGLELINE);
+        DrawTextA(hdc, "내 전적", -1, new RECT{ rightColX, y, rightColX + 200, y + rowHeight }, DT_LEFT | DT_SINGLELINE);
+        y += rowHeight + 5;
+
+        SelectObject(hdc, hFontContent);
+        SetTextColor(hdc, RGB(0, 0, 0));
+        DrawTextA(hdc, g_strMyID.c_str(), -1, new RECT{ leftColX + 20, y, leftColX + 250, y + rowHeight }, DT_LEFT | DT_SINGLELINE);
+
+        char szStat[64];
+        sprintf_s(szStat, "총 %d판 | 승 %d | 패 %d", g_MyData.iTotalMatch, g_MyData.iWin, g_MyData.iLose);
+        DrawTextA(hdc, szStat, -1, new RECT{ rightColX + 20, y, rightColX + 250, y + rowHeight }, DT_LEFT | DT_SINGLELINE);
+        y += colGapY;
+
+        // ===== [2] 방 정보 =====
+        SelectObject(hdc, hFontTitle);
+        SetTextColor(hdc, RGB(255, 128, 0)); // 주황
+        DrawTextA(hdc, "방 번호", -1, new RECT{ leftColX, y, leftColX + 200, y + rowHeight }, DT_LEFT | DT_SINGLELINE);
+        DrawTextA(hdc, "유저 수", -1, new RECT{ rightColX, y, rightColX + 200, y + rowHeight }, DT_LEFT | DT_SINGLELINE);
+        y += rowHeight + 5;
+
+        SelectObject(hdc, hFontContent);
+        SetTextColor(hdc, RGB(0, 0, 0));
+        char szBuffer[64];
+        sprintf_s(szBuffer, "%d", g_iRoomNum);
+        DrawTextA(hdc, szBuffer, -1, new RECT{ leftColX + 20, y, leftColX + 200, y + rowHeight }, DT_LEFT | DT_SINGLELINE);
+
+        sprintf_s(szBuffer, "%d", g_iUserCntInRoom);
+        DrawTextA(hdc, szBuffer, -1, new RECT{ rightColX + 20, y, rightColX + 200, y + rowHeight }, DT_LEFT | DT_SINGLELINE);
+        y += colGapY;
+
+        // ===== [3] 유저 목록 =====
+        y += 10;
+        SetTextColor(hdc, RGB(50, 50, 180)); // 진한 파랑
+        SelectObject(hdc, hFontTitle);
+        DrawTextA(hdc, "접속 유저 목록", -1, new RECT{ leftColX, y, leftColX + 300, y + rowHeight }, DT_LEFT | DT_SINGLELINE);
+        y += rowHeight;
+
+        SelectObject(hdc, hFontContent);
+        for (int i = 0; i < g_iUserCntInRoom; ++i)
+        {
+            sprintf_s(szBuffer, "- %s", g_UserID[i]);
+            DrawTextA(hdc, szBuffer, -1, new RECT{ leftColX + 20, y, leftColX + 300, y + rowHeight }, DT_LEFT | DT_SINGLELINE);
+            y += rowHeight;
+        }
+
+        // ===== [4] 채팅창 =====
+        const int chatX = 650;
+        const int chatW = 450;
+
+        const int maxY = 670;
+        const int marginBottom = 30;
+        const int chatH = 300; 
+        const int chatY = maxY - chatH - marginBottom;
+        SetTextColor(hdc, RGB(128, 0, 128)); 
+        SelectObject(hdc, hFontTitle);
+        DrawTextA(hdc, "채팅창", -1, new RECT{ chatX, chatY - 30, chatX + 300, chatY }, DT_LEFT | DT_SINGLELINE);
+
+        // 박스
+        HBRUSH hOldBrush = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
+        HPEN hPen = CreatePen(PS_SOLID, 1, RGB(0, 0, 0));
+        HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
+        Rectangle(hdc, chatX - 5, chatY - 5, chatX + chatW + 5, chatY + chatH + 5);
+        SelectObject(hdc, hOldPen);
+        SelectObject(hdc, hOldBrush);
+        DeleteObject(hPen);
+
+        // 메시지 출력
+        SelectObject(hdc, hFontContent);
+        SetTextColor(hdc, RGB(80, 0, 150));
+        int totalMessages = (int)g_ChatMessages.size();
+
+        // 화면에 그릴 수 있는 최대 줄 수 계산
+        int maxChatLines = chatH / CHAT_LINE_HEIGHT;
+        int startIdx = max(0, totalMessages - maxChatLines - g_iChatScrollOffset);
+        int endIdx = min(totalMessages, startIdx + maxChatLines);
+
+        int line = 0;
+        for (int i = startIdx; i < endIdx; ++i)
+        {
+            RECT rc = {
+                chatX,
+                chatY + line * CHAT_LINE_HEIGHT,
+                chatX + chatW,
+                chatY + (line + 1) * CHAT_LINE_HEIGHT
+            };
+            sprintf_s(szBuffer, "%s: %s", g_ChatMessages[i].first.c_str(), g_ChatMessages[i].second.c_str());
+            DrawTextA(hdc, szBuffer, -1, &rc, DT_LEFT | DT_WORDBREAK);
+            line++;
+        }
+
+        // 스크롤바
+        if (totalMessages > maxChatLines)
+        {
+            int scrollH = chatH;
+            int visibleRatio = maxChatLines * 100 / totalMessages;
+            int barHeight = scrollH * visibleRatio / 100;
+            barHeight = max(barHeight, 10);
+
+            int maxOffset = totalMessages - maxChatLines;
+            int offsetRatio = (g_iChatScrollOffset * 100) / max(1, maxOffset);
+            int barY = chatY + (scrollH * offsetRatio / 100);
+
+            // 스크롤바 Y 위치 제한 (clamp)
+            barY = max(chatY, min(barY, chatY + chatH - barHeight));
+
+            HBRUSH hBarBrush = CreateSolidBrush(RGB(100, 100, 100));
+            RECT barRect = {
+                chatX + chatW + 5,
+                barY,
+                chatX + chatW + 10,
+                barY + barHeight
+            };
+            FillRect(hdc, &barRect, hBarBrush);
+            DeleteObject(hBarBrush);
+        }
+
+  
+        SelectObject(hdc, hOldFont);
+        DeleteObject(hFontTitle);
+        DeleteObject(hFontContent);
+    }
+}
 
 
 void RecvRegisterMsg(char* recvBuffer)
@@ -402,14 +573,38 @@ void Recv_Notify_Stone(char* recvBuffer)
     }
 }
 
+void Recv_MyData(char* recvBuffer)
+{
+    USER_DATA_PACKET* packet = reinterpret_cast<USER_DATA_PACKET*>(recvBuffer);
+ 
+    g_MyData.iTotalMatch = packet->iTotalMatch;
+    g_MyData.iWin = packet->iWinCount;
+    g_MyData.iLose = packet->iLoseCount;
+}
+
+void Recv_OtherUserData(char* recvBuffer)
+{
+    USER_DATA_PACKET* packet = reinterpret_cast<USER_DATA_PACKET*>(recvBuffer);
+
+    g_MyData.iTotalMatch = packet->iTotalMatch;
+    g_MyData.iWin = packet->iWinCount;
+    g_MyData.iLose = packet->iLoseCount;
+
+    // 다른 유저의 데이터도 갱신해줘야지..
+
+
+}
+
 void RecvThreadFunc()
 {
+    static std::vector<char> recvBuffer;   // 누적 버퍼 (이전 데이터 보관용)
+    char tempBuffer[1024];                 // 임시 수신 버퍼
+
     while (true)
     {
-        char recvBuffer[1024];
         WSABUF wsaRecvBuf;
-        wsaRecvBuf.buf = recvBuffer;
-        wsaRecvBuf.len = sizeof(recvBuffer);
+        wsaRecvBuf.buf = tempBuffer;
+        wsaRecvBuf.len = sizeof(tempBuffer);
 
         OVERLAPPED recvOverlapped{};
         DWORD recvBytes = 0;
@@ -421,7 +616,7 @@ void RecvThreadFunc()
             int err = WSAGetLastError();
             if (err == WSA_IO_PENDING)
             {
-                // 완료까지 기다린다
+                // 완료까지 기다림
                 BOOL result = GetOverlappedResult((HANDLE)clientSocket, &recvOverlapped, &recvBytes, TRUE);
                 if (!result || recvBytes == 0)
                 {
@@ -438,42 +633,76 @@ void RecvThreadFunc()
 
         if (recvBytes > 0)
         {
-            PACKET_HEADER* header = reinterpret_cast<PACKET_HEADER*>(recvBuffer);
-            switch ((PACKET_ID)header->PacketId)
+            // 받은 데이터를 누적 버퍼에 추가
+            recvBuffer.insert(recvBuffer.end(), tempBuffer, tempBuffer + recvBytes);
+
+            // 패킷 단위로 처리
+            while (true)
             {
-            case PACKET_ID::REGISTER_RESPONSE:
-                RecvRegisterMsg(recvBuffer);
-                break;
-            case PACKET_ID::LOGIN_RESPONSE:
-                RecvLoginMsg(recvBuffer);
-                break;
-            case PACKET_ID::ROOM_ENTER_RESPONSE:
-                RecvRoom(recvBuffer);
-                break;
-            case PACKET_ID::ROOM_LEAVE_RESPONSE:
-                RecvLeaveRoom(recvBuffer);
-                break;       
-            case PACKET_ID::ROOM_LEAVE_NOTIFY:
-                RecvLeave_Notify_Room(recvBuffer);
-                break;       
-            case PACKET_ID::ROOM_CHAT_NOTIFY:
-                RecvChat(recvBuffer);
-                break;
-            case PACKET_ID::START_GAME_RESPONSE_PACKET:  
-                RecvGameStart(recvBuffer);
-                break;
-            case PACKET_ID::PUT_STONE_RESPONSE_PACKET:  // 돌 놓았을때
-                RecvStone(recvBuffer);
-                break;
-            case PACKET_ID::PUT_STONE_NOTIFY_PACKET:  
-                Recv_Notify_Stone(recvBuffer);
-                break;
+                // 최소한 헤더 크기만큼은 있어야 패킷 파싱 가능
+                if (recvBuffer.size() < sizeof(PACKET_HEADER))
+                    break;
 
+                // 헤더 포인터
+                PACKET_HEADER* header = reinterpret_cast<PACKET_HEADER*>(recvBuffer.data());
 
-            default:              
-                break;
+               // // 헤더에 패킷 전체 크기 필드가 있다고 가정 (예: header->PacketSize)
+                 int packetSize = header->PacketLength; // 패킷 전체 크기(헤더+데이터)
+               //
+               // // 패킷 전체가 버퍼에 다 도착했는지 확인
+               // if (recvBuffer.size() < packetSize)
+               //     break;  // 아직 다 안 왔으니 더 받아야 함
+
+                // 완성된 패킷 데이터 포인터
+                char* packetData = recvBuffer.data();
+
+                // 패킷 타입에 따른 처리
+                switch ((PACKET_ID)header->PacketId)
+                {
+                case PACKET_ID::REGISTER_RESPONSE:
+                    RecvRegisterMsg(packetData);
+                    break;
+                case PACKET_ID::LOGIN_RESPONSE:
+                    RecvLoginMsg(packetData);
+                    break;
+                case PACKET_ID::ROOM_ENTER_RESPONSE:
+                    RecvRoom(packetData);
+                    break;
+                case PACKET_ID::ROOM_LEAVE_RESPONSE:
+                    RecvLeaveRoom(packetData);
+                    break;
+                case PACKET_ID::ROOM_LEAVE_NOTIFY:
+                    RecvLeave_Notify_Room(packetData);
+                    break;
+                case PACKET_ID::ROOM_CHAT_NOTIFY:
+                    RecvChat(packetData);
+                    break;
+                case PACKET_ID::START_GAME_RESPONSE_PACKET:
+                    RecvGameStart(packetData);
+                    break;
+                case PACKET_ID::PUT_STONE_RESPONSE_PACKET:
+                    RecvStone(packetData);
+                    break;
+                case PACKET_ID::PUT_STONE_NOTIFY_PACKET:
+                    Recv_Notify_Stone(packetData);
+                    break;
+                case PACKET_ID::MY_DATA_RESPONSE:
+                    Recv_MyData(packetData);
+                    break;
+                case PACKET_ID::OTHER_USER_DATA_RESPONSE:
+                    Recv_OtherUserData(packetData);
+                    break;
+
+                default:
+                    break;
+                }
+
+                // 처리한 패킷만큼 버퍼에서 제거
+                recvBuffer.erase(recvBuffer.begin(), recvBuffer.begin() + packetSize);
+                ZeroMemory(tempBuffer,sizeof(tempBuffer));
             }
         }
+
     }
 }
 
@@ -598,7 +827,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         wc.lpszClassName, _T("오목 게임 - Win32 GUI"),
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT,
-        1200,720,
+        1200,760,
         NULL, NULL, hInstance, NULL);
 
     g_hWnd = hWnd;
@@ -682,18 +911,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
         g_hButtonLeaveRoom = CreateWindow(_T("BUTTON"), _T("방 나가기"),
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            900, 340, 100, 25, hWnd, (HMENU)3, g_hInstance, NULL);
+            370, 620, 100, 25, hWnd, (HMENU)3, g_hInstance, NULL);
         ShowWindow(g_hButtonLeaveRoom, SW_HIDE);
 
         g_hButtonGameStart = CreateWindow(_T("BUTTON"), _T("게임 시작"),
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            620, 100, 100, 25, hWnd, (HMENU)4, g_hInstance, NULL);
+            500, 620, 100, 25, hWnd, (HMENU)4, g_hInstance, NULL);
         ShowWindow(g_hButtonGameStart, SW_HIDE);
 
 
         g_hUserList = CreateWindow(_T("LISTBOX"), NULL,
             WS_CHILD | WS_VISIBLE | LBS_NOTIFY | WS_BORDER | WS_VSCROLL,
-            620, 150, 150, 100, hWnd, (HMENU)5, g_hInstance, NULL);
+            900, 200, 150, 100, hWnd, (HMENU)5, g_hInstance, NULL);
         ShowWindow(g_hUserList, SW_HIDE);
 
        
@@ -710,7 +939,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
         g_hChatEdit = CreateWindowA("EDIT", "",
             WS_CHILD | WS_VISIBLE | WS_BORDER | ES_LEFT | ES_AUTOHSCROLL,
-            700, 600, 450, 25,
+            650, 660, 450, 25,
             hWnd, (HMENU)1001, g_hInstance, nullptr);
         g_OldEditProc = (WNDPROC)SetWindowLongPtr(g_hChatEdit, GWLP_WNDPROC, (LONG_PTR)EditSubclassProc);
         ShowWindow(g_hChatEdit, SW_HIDE);
@@ -957,141 +1186,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps);
 
-        if (isInRoom) 
+        if (isInRoom)
         {
             DrawBoard(hdc);
             DrawStones(hdc);
-
-            SetTextColor(hdc, RGB(120, 180, 30));
- 
-            CHAR szBuffer[128] = { 0 };
-            int startY = 100;
-            int lineHeight = 30;
-            int currentLine = 0;
-
-            auto MakeRect = [&](int line) -> RECT {
-                return { 850, startY + line * lineHeight, 1100, startY + (line + 1) * lineHeight };
-            };
-
-            RECT rt = MakeRect(currentLine++);
-            // 방 번호
-            sprintf_s(szBuffer, "접속중인 방 번호: %d", g_iRoomNum);
-            DrawTextA(hdc, szBuffer, -1, &rt, DT_LEFT | DT_SINGLELINE);
-
-            // 유저 수
-            rt = MakeRect(currentLine++);
-            sprintf_s(szBuffer, "접속중인 유저 수: %d", g_iUserCntInRoom);
-            DrawTextA(hdc, szBuffer, -1, &rt, DT_LEFT | DT_SINGLELINE);
-
-            // 유저 ID들           
-            for (int i = 0; i < g_iUserCntInRoom; ++i)
-            {
-                rt = MakeRect(currentLine++);
-
-                sprintf_s(szBuffer, "접속중인 유저 ID: %s", g_UserID[i]);
-                DrawTextA(hdc, szBuffer, -1, &rt, DT_LEFT | DT_SINGLELINE);
-            }
-
-
-            
-
-           
-            HBRUSH hOldBrush = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
-            HPEN hRedPen = CreatePen(PS_SOLID, 2, RGB(0, 0, 0));
-            HPEN hOldPen = (HPEN)SelectObject(hdc, hRedPen);
-
-            rt = { CHAT_START_X ,CHAT_START_Y - 40,CHAT_START_X + 100,CHAT_START_Y };
-            sprintf_s(szBuffer, "채팅창");
-            DrawTextA(hdc, szBuffer, -1, &rt, DT_LEFT | DT_SINGLELINE);
-
-            Rectangle(hdc, CHAT_START_X - 5, CHAT_START_Y - 10,
-                CHAT_START_X + CHAT_WINDOW_WIDTH + 5,
-                CHAT_START_Y + CHAT_WINDOW_HEIGHT + 5);
-
-            SelectObject(hdc, hOldPen);
-            SelectObject(hdc, hOldBrush);
-            DeleteObject(hRedPen);
-
-            // 채팅 메시지 그리기
-            SetTextColor(hdc, RGB(255, 0, 255));
-
-            int totalMessages = (int)g_ChatMessages.size();
-            int startIdx = max(0, totalMessages - MAX_CHAT_DISPLAY_LINES - g_iChatScrollOffset);
-            int endIdx = min(totalMessages, startIdx + MAX_CHAT_DISPLAY_LINES);
-
-            char szChatLine[512] = { 0 };
-            int drawLine = 0;
-            for (int i = startIdx; i < endIdx; ++i)
-            {
-                RECT chatRect = {
-                    CHAT_START_X,
-                    CHAT_START_Y + drawLine * CHAT_LINE_HEIGHT,
-                    CHAT_START_X + CHAT_WINDOW_WIDTH,
-                    CHAT_START_Y + (drawLine + 1) * CHAT_LINE_HEIGHT
-                };
-
-
-                sprintf_s(szChatLine, "%s 님의 채팅: %s", g_ChatMessages[i].first.c_str(), g_ChatMessages[i].second.c_str());
-                DrawTextA(hdc, szChatLine, -1, &chatRect, DT_LEFT | DT_WORDBREAK);     
-                drawLine++;
-            }
-
-            // 스크롤바 그리기
-            if (totalMessages > MAX_CHAT_DISPLAY_LINES)
-            {
-                int scrollBarHeight = CHAT_WINDOW_HEIGHT;
-                int visibleRatio = MAX_CHAT_DISPLAY_LINES * 100 / totalMessages;
-                int barHeight = scrollBarHeight * visibleRatio / 100;
-                barHeight = max(barHeight, 10);
-
-                int maxOffset = totalMessages - MAX_CHAT_DISPLAY_LINES;
-                int offsetRatio = (g_iChatScrollOffset * 100) / max(1, maxOffset);
-                int barY = CHAT_START_Y + (scrollBarHeight * offsetRatio / 100);
-
-                if (barY + barHeight > CHAT_START_Y + CHAT_WINDOW_HEIGHT)
-                {
-                    barY = CHAT_START_Y + CHAT_WINDOW_HEIGHT - barHeight;
-                }
-
-                HBRUSH hBarBrush = CreateSolidBrush(RGB(100, 100, 100));
-                RECT barRect = {
-                    CHAT_START_X + CHAT_WINDOW_WIDTH + 5,
-                    barY,
-                    CHAT_START_X + CHAT_WINDOW_WIDTH + 10,
-                    barY + barHeight
-                };
-                FillRect(hdc, &barRect, hBarBrush);
-                DeleteObject(hBarBrush);
-            }
-
         }
-        else
-        {
-            // 배경 투명 & 텍스트 색상 지정
-            SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, RGB(210, 200, 30));
 
-            // 기본 폰트 지정 (또는 따로 만든 hFont 선택)
-            HFONT hFont = CreateFont(
-                24, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, _T("Segoe UI"));
-            HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
-
-            int windowWidth = 1200;
-            int editWidth = 300;
-            int editHeight = 40;
-            int centerX = windowWidth / 2;
-
-            RECT rcID = { centerX - editWidth / 2 - 130, 200, centerX - editWidth / 2 - 20, 200 + editHeight };
-            RECT rcPW = { centerX - editWidth / 2 - 130, 260, centerX - editWidth / 2 - 20, 260 + editHeight };
-
-            DrawText(hdc, _T("아이디 입력:"), -1, &rcID, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
-            DrawText(hdc, _T("비밀번호 입력:"), -1, &rcPW, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
-
-            SelectObject(hdc, hOldFont);
-            DeleteObject(hFont);
-        }
+        DrawUI(hdc);
 
         EndPaint(hWnd, &ps);
     } break;
