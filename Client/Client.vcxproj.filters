@@ -18,5 +18,13 @@
     <ClCompile Include="Client.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="SoundMager.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="SoundMager.h">
+      <Filter>소스 파일</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

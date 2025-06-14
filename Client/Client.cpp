@@ -20,6 +20,8 @@
 #include <iostream>
 #include <tchar.h>
 
+#include "SoundMager.h"
+
 
 SOCKET clientSocket{};
 bool isLogin = false;
@@ -33,7 +35,7 @@ static ROOM_CHAT_REQUEST_PACKET RoomChatPacket{};
 
 static START_GAME_REQUEST_PACKET GamePacket{};
 
-
+CSound_Manager* pSoundMgr;
 
 struct USER_DATA
 {
@@ -575,6 +577,9 @@ void RecvStone(char* recvBuffer)
         int stoneColor = response->stoneColor;  // 예: 1=흑, 2=백
 
         board[row][col] = stoneColor;
+
+        pSoundMgr->PlaySound(TEXT("stone.mp3"), 1, 5.f);
+
         InvalidateRect(g_hWnd, NULL, TRUE);
     }
     else
@@ -928,14 +933,25 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     recvThread.detach();
 
     MSG msg = { 0 };
+
+    pSoundMgr = new CSound_Manager;
+    pSoundMgr->Initialize();
+    pSoundMgr->PlayBGM(TEXT("bgm.mp3"), 0.3f);
+
+  
+
     while (GetMessage(&msg, NULL, 0, 0))
-    {
+    {     
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
 
     closesocket(clientSocket);
     WSACleanup();
+
+
+    pSoundMgr->Free();
+    //delete pSoundMgr;
 
     return (int)msg.wParam;
 }
